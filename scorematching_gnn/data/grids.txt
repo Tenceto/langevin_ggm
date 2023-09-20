@@ -1,0 +1,8 @@
+grids
+m_min = 7
+m_max = 7
+min_nodes = 49
+max_nodes = 49
+min_random_edges = 2
+max_random_edges = 5
+seed = 0

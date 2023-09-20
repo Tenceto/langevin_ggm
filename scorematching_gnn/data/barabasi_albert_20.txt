@@ -1,0 +1,6 @@
+barabasi_albert
+nodes: 20
+m1: 1
+m2: 2
+p: 0.5
+seed_nx: 0
