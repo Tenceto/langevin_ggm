@@ -116,14 +116,19 @@ class QuicEstimator:
         mask_unknown = np.isnan(A_nan)
 
         Lambda = np.zeros(A_nan.shape)
+        lambda_n = self.lambda_fun(X_obs.shape[0])
         # The "infinite penalty" should not be ridiculously high
         # Otherwise the algorithm becomes numerically unstable
         # (Before I was using np.inf and it wasn't working properly)
         Lambda[mask_inf_penalty] = self.lambda_inf
-        Lambda[mask_unknown] = self.lambda_fun(X_obs.shape[0])
+        Lambda[mask_unknown] = lambda_n
         model = QuicGraphicalLasso(lam=Lambda, init_method="cov", auto_scale=False)
         Theta_quic = model.fit(X_obs).precision_
-        A_quic = (np.abs(Theta_quic - np.diag(np.diag(Theta_quic))) != 0.0).astype(float)
+
+        if lambda_n > 0:
+            A_quic = (np.abs(Theta_quic - np.diag(np.diag(Theta_quic))) != 0.0).astype(float)
+        else:
+            A_quic = np.abs(Theta_quic - np.diag(np.diag(Theta_quic)))
 
         return A_quic
 
