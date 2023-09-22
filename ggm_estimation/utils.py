@@ -15,11 +15,14 @@ def vec_to_adj_matrix(h, output_size=None):
     H = H + H.T
     return H
 
-def random_nan_replacement(x, n_choose, one_zero_ratio=0.5, n_proportional=True):
+def random_nan_replacement(x, n_choose, n_proportional=True, one_zero_ratio=None):
     x = x.astype(float)
 
     if n_proportional:
         n_choose = int(n_choose * len(x)) - np.isnan(x).sum()
+
+    if one_zero_ratio is None:
+        one_zero_ratio = x.mean()
 
     num_ones = np.random.binomial(1, p=one_zero_ratio, size=n_choose).sum()
     num_zeros = n_choose - num_ones
