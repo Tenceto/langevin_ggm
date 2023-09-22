@@ -31,7 +31,7 @@ class LangevinEstimator:
 
         return Theta_quic
     
-    def generate_sample(self, A_nan, X_obs, temperature=1.0, num_samples=1):
+    def generate_sample(self, A_nan, X_obs, temperature=1.0, num_samples=1, seed=None):
         U_idxs_triu = torch.where(torch.isnan(torch.triu(A_nan)))
         O_mask = ~ torch.isnan(A_nan)
         if self.use_likelihood:
@@ -45,7 +45,10 @@ class LangevinEstimator:
             S, Theta_est, num_obs = None, None, 0
         
         As = []
-        for _ in range(num_samples):
+        for m in range(num_samples):
+            if seed is not None:
+                torch.manual_seed(seed + m)
+                np.random.seed(seed + m)
             this_A = self._generate_individual_sample(A_nan, S, Theta_est, temperature, U_idxs_triu, O_mask, num_obs)
             As.append(this_A)
         A = torch.stack(As).mean(dim=0)
