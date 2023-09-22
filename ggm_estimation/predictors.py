@@ -79,7 +79,6 @@ class LangevinEstimator:
                     cov_inv = Theta_est * (A_tilde + I)
                     cov = torch.linalg.inv(cov_inv)
                     aux_matrix = - torch.diag(torch.diag(cov)) + 2 * cov - 2 * S + torch.diag(torch.diag(S))
-                    # TODO: Check that the 0.5 is correct, I think it is when comparing it with autograd
                     score_likelihood = (num_obs * aux_matrix[U_idxs_triu] * Theta_est[U_idxs_triu] * 0.5).float()
                 else:
                     score_likelihood = 0.0

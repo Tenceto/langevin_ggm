@@ -24,7 +24,8 @@ def simulate_ggm(A, n_obs, nans, one_zero_ratio, n_proportional, psd_trials, pri
 				_ = np.linalg.cholesky(Theta)
 				break
 			except np.linalg.LinAlgError:
-				logger.warning(f"Not PSD matrix. Trying again.")
+				if logger is not None:
+					logger.warning(f"Not PSD matrix. Trying again.")
 				pass
 			trials += 1
 		if trials == psd_trials:

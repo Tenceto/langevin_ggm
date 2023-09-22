@@ -63,11 +63,12 @@ def compute_accuracy_no_threshold(results_file, methods, remove_num_obs=[]):
     return all_accuracies
 
 
-def plot_results(accuracy_dict, labels, title, output_file=None, colors=None, 
+def plot_results(accuracy_dict, labels, title="", output_file=None, colors=None, 
                  linestyles=None, xlabel=r"Number of observations $k$", ylabel="Edge prediction accuracy", logscale=True,
                  legend_loc="best", ylims=None, legend_ncol=1):
     if linestyles is None:
         linestyles = {method: "-" for method in accuracy_dict.keys()}
+    accuracy_dict = {k: accuracy_dict[k] for k in labels.keys()}
     for method in accuracy_dict.keys():
         if colors is not None:
             plt.plot(list(accuracy_dict[method].keys()), list(accuracy_dict[method].values()),
