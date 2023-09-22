@@ -3,14 +3,15 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score, accuracy_score, roc_auc_score
+from scipy.optimize import curve_fit
 
-def compute_accuracy_best_threshold(results_file, methods, remove_num_obs=[], grid_size=50, 
-                                    col_x_axis="num_obs", metric="accuracy"):
-    df = pd.read_csv(results_file, sep=";", index_col=0).reset_index(drop=True)
-    df = df[~ df[col_x_axis].isin(remove_num_obs)]
-    # df = df.iloc[:100]
+from ggm_estimation.utils import _lambda_generic
 
-    print(len(df))
+pd.options.mode.chained_assignment = None  # default='warn'
+
+def compute_estimation_performance(filename, tuneable_methods, fixed_methods, train_size, threshold_grid, metric, col_x_axis):
+    df = pd.read_csv(filename, sep=";", index_col=0).reset_index(drop=True)
+    # df["seed"] = np.repeat(np.arange(len(df) / 4), 4)
 
     if metric == "accuracy":
         metric_fun = accuracy_score
@@ -18,49 +19,39 @@ def compute_accuracy_best_threshold(results_file, methods, remove_num_obs=[], gr
         metric_fun = f1_score
     elif metric == "auc":
         metric_fun = roc_auc_score
+    else:
+        return None
 
-    threshold_grid = np.linspace(0.0, 1.0, grid_size)
-    all_thresholds = dict()
-    all_accuracies = dict()
-
-    for col in ["real_values"] + [f"pred_{method}" for method in methods]:
+    for col in ["real_values"] + [f"pred_{method}" for method in tuneable_methods + fixed_methods]:
         df[col] = df[col].apply(lambda x: np.array(eval(x)))
-    
-    for method in methods:
-        accuracy_per_threshold = list()
+
+    train_seeds = np.random.choice(df["seed"].unique(), int(train_size * len(df) / df[col_x_axis].nunique()), replace=False)
+    df_train = df[df["seed"].isin(train_seeds)]
+    df_test = df[~ df["seed"].isin(train_seeds)]
+    print("Training samples:", df_train["seed"].nunique())
+    print("Test samples:", df_test["seed"].nunique())
+
+    final_scores = dict()
+    for method in tuneable_methods:
+        scores_per_threshold = []
         for th in threshold_grid:
-            # df["accuracy"] = df.apply(lambda row: np.mean((row[f"pred_{method}"] >= th) == row["real_values"]), axis=1)
-            df["accuracy"] = df.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"] >= th), axis=1)
-            accuracies = df.groupby(col_x_axis)["accuracy"].mean()
-            accuracy_per_threshold.append(accuracies.to_dict())
-        accuracy_per_threshold = {k: [dic[k] for dic in accuracy_per_threshold] for k in accuracy_per_threshold[0]}
+            df_train[metric] = df_train.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"] >= th), axis=1)
+            scores = df_train.groupby(col_x_axis)[metric].mean()
+            scores_per_threshold.append(scores.to_dict())
 
-        thresholds_per_num_obs = dict()
-        accuracies_per_num_obs = dict()
-        for _, (num_obs, accuracies) in enumerate(accuracy_per_threshold.items()):
-            best_th = threshold_grid[np.argmax(accuracies)]
-            thresholds_per_num_obs.update({num_obs: best_th})
-            accuracies_per_num_obs.update({num_obs: np.max(accuracies)})
-        all_thresholds.update({method: thresholds_per_num_obs})
-        all_accuracies.update({method: accuracies_per_num_obs})
+        # Convert the list of dictionaries to a dictionary of lists
+        scores_per_threshold = {k: [dic[k] for dic in scores_per_threshold] for k in scores_per_threshold[0]}
+        # Get the best threshold for each case
+        best_thresholds = {k: threshold_grid[np.argmax(v)] for k, v in scores_per_threshold.items()}
+
+        df_test[metric] = df_test.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"] >= best_thresholds[row["num_obs"]]), axis=1)
+        final_scores[method] = df_test.groupby(col_x_axis)[metric].mean().to_dict()
+
+    for method in fixed_methods:
+        df_test[metric] = df_test.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"]), axis=1)
+        final_scores[method] = df_test.groupby(col_x_axis)[metric].mean().to_dict()
     
-    return all_thresholds, all_accuracies
-
-
-def compute_accuracy_no_threshold(results_file, methods, remove_num_obs=[]):
-    df = pd.read_csv(results_file, sep=";", index_col=0).reset_index(drop=True)
-    df = df[~ df["num_obs"].isin(remove_num_obs)]
-    all_accuracies = dict()
-
-    for col in ["real_values"] + [f"pred_{method}" for method in methods]:
-        df[col] = df[col].apply(lambda x: np.array(eval(x)))
-    
-    for method in methods:
-        df["accuracy"] = df.apply(lambda row: np.mean((row[f"pred_{method}"]) == row["real_values"]), axis=1)
-        accuracies = df.groupby("num_obs")["accuracy"].mean()
-        all_accuracies.update({method: accuracies.to_dict()})
-    
-    return all_accuracies
+    return final_scores, best_thresholds
 
 
 def plot_results(accuracy_dict, labels, title="", output_file=None, colors=None, 
