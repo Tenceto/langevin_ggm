@@ -4,65 +4,73 @@ import pandas as pd
 from functools import partial
 import logging
 from scipy.stats import wishart
-import torch
-import random
 import pickle as pkl
 import networkx as nx
-from contextlib import redirect_stdout
-from sklearn.metrics import f1_score, accuracy_score, roc_auc_score
+from sklearn.metrics import f1_score, accuracy_score
 
-# os.chdir("/home/msevilla/link_prediction/")
-
-import ggm_estimation.ergm.statistics as st
-import ggm_estimation.ergm.tools as et
-import ggm_estimation.grids.tools as gr
-import ggm_estimation.barabasi.tools as ba
 from inverse_covariance import QuicGraphicalLasso
-import ggm_estimation.utils as mtx
+import ggm_estimation.data_generation as gen
+
 
 logger_file = "tuning_glasso.log"
-output_file = "outputs/tuning_glasso_deezer_all_missing.csv"
-
-# Settings
-# Graph parameters
-
-# num_nodes = 50
-# thetas = [0.7, -2.0]
-# global_statistics_r = [f"altkstar({st.LAMBDA_}, fixed=TRUE)", "edges"]
-# global_statistics_py = ["altkstar", "edges"]
-
-# m_min = 5
-# m_max = 9
-# min_nodes = 40
-# max_nodes = 49
-# min_random_edges = 2
-# max_random_edges = 5
-
-# nodes = [47, 49, 51, 53]
-# m1 = 2
-# m2 = 4
-# p = 0.5
-# n_sim = 1000 // len(nodes)
-
-# GMRF parameters
-# prior_Theta = wishart(num_nodes, np.eye(num_nodes) * 10 / num_nodes)
-
-prior_Theta = lambda num_nodes: wishart(num_nodes, np.eye(num_nodes) * 10 / num_nodes)
-
-# prior_Theta = wishart(nodes, np.eye(nodes) * 10 / nodes)
+graph_type = "deezer"
+n_sim = 200
+nans = 0.5
+one_zero_ratio = None
+n_proportional = True
+metric = "f1"
 
 # Simulation parameters
-n_sim = 200
-nans = 1.0
-one_zero_ratio = 0.5
-n_proportional = True
-seed = 400 # np.random.randint(0, 1000)
+seed = 400
 psd_trials = 10
+
+# Graph parameters
+if graph_type == "grids":
+	# Graph parameters
+	m_min = 5
+	m_max = 9
+	min_nodes = 40
+	max_nodes = 49
+	min_random_edges = 2
+	max_random_edges = 5
+	graph_generator = partial(gen.generate_grids, 
+						   	  m_min=m_min, m_max=m_max, min_nodes=min_nodes, 
+						   	  max_nodes=max_nodes, min_random_edges=min_random_edges, 
+						   	  max_random_edges=max_random_edges, seed=0)
+elif graph_type == "ergm":
+	# Graph parameters
+	num_nodes = 50
+	max_nodes = 50
+	betas = [0.7, -2.0]
+	graph_generator = partial(gen.generate_ergm, nodes=num_nodes, betas=betas, seed_r=seed)
+elif graph_type == "barabasi":
+	# Graph parameters
+	nodes_list = [46, 48, 50, 52]
+	m1 = 2
+	m2 = 4
+	p = 0.5
+	max_nodes = 53
+	graph_generator = partial(gen.generate_barabasi_albert, 
+						   	  nodes_list=nodes_list, m1=m1, m2=m2, p=p, seed=seed)
+elif graph_type == "deezer":
+	graph_generator = partial(gen.load_graph_dataset, filename="scorematching_gnn/data/test_deezer_ego.pkl")
+
+if metric == "f1":
+	metric_fun = f1_score
+elif metric == "accuracy":
+	metric_fun = accuracy_score
+else:
+	raise ValueError("Invalid metric.")
+
+# GMRF parameters
+prior_Theta = lambda num_nodes: wishart(num_nodes, np.eye(num_nodes) * 10 / num_nodes)
 
 # Tuning grid parameters
 lambda_inf = 10000
 num_obs_list = np.logspace(np.log10(25), np.log10(1500), 6).astype(int)
 lambdas = np.logspace(-3, -1, 30)
+
+output_file = f"outputs/tuning_glasso_{graph_type}_{nans}_{n_proportional}_{one_zero_ratio}_{metric}.csv"
 
 # Run your main script here:
 if __name__ == '__main__':
@@ -81,60 +89,15 @@ if __name__ == '__main__':
 	# Install exception handler
 	sys.excepthook = exc_handler
 
-	# graphs = et.generate_matrices(num_nodes, thetas, n_sim, global_statistics_r, num_attr=0, seed_r=seed)
-
-	# graphs = gr.generate_matrices(m_min, m_max, min_nodes, max_nodes, min_random_edges, max_random_edges, n_sim, seed=seed)
-
-	# graphs = ba.generate_matrices(nodes, m1, m2, p, n_sim, seed=seed)
-	# graphs = list()
-	# for n in nodes:
-	# 	graphs.extend(ba.generate_matrices(n, m1, m2, p, n_sim, seed=n))
-	# random.shuffle(graphs)
-
-	with open("scorematching_gnn/data/test_deezer_ego.pkl", "rb") as f:
-		graphs = pkl.load(f)
-	graphs = [nx.to_numpy_array(g) for g in graphs]
-
-	# I = np.eye(num_nodes)
-
-	def simulate_data(A, n_obs):
-		num_nodes = A.shape[0]
-		I = np.eye(num_nodes)
-
-		a = mtx.adj_matrix_to_vec(A)
-		a_nan = mtx.random_nan_replacement(a, nans, one_zero_ratio=one_zero_ratio, n_proportional=n_proportional)
-		A_obs = mtx.vec_to_adj_matrix(a_nan)
-
-		trials = 0
-		while trials < psd_trials:
-			try:
-				# Theta = prior_Theta.rvs() * (A + I)
-				Theta = prior_Theta(num_nodes).rvs() * (A + I)
-				# If this fails, it is because Theta is not PSD
-				_ = np.linalg.cholesky(Theta)
-				break
-			except np.linalg.LinAlgError:
-				print(f"Not PSD matrix. Trying again.")
-				pass
-			trials += 1
-		if trials == psd_trials:
-			raise RuntimeError("Could not generate a PSD matrix.")
-
-		inv_Theta = np.linalg.inv(Theta)
-		X_obs = np.random.multivariate_normal(np.zeros(num_nodes), inv_Theta, size=n_obs)
-		return A_obs, X_obs, Theta
+	graphs = graph_generator(n_sim=n_sim)
 
 	logger.info(f"Matrices generated.")
 
-	for g in graphs:
+	for A in graphs:
 		output_results = []
-
 		try:
-			A = g["A"]
-		except IndexError:
-			A = g
-		try:
-			A_obs, all_X, Theta = simulate_data(A, num_obs_list[-1])
+			A_obs, all_X = gen.simulate_ggm(A, num_obs_list[-1], 
+											nans, one_zero_ratio, n_proportional, psd_trials, prior_Theta, logger)
 		except RuntimeError:
 			logger.warning(f"Could not generate a PSD matrix. Skipping.")
 			continue
@@ -158,10 +121,9 @@ if __name__ == '__main__':
 				model = QuicGraphicalLasso(lam=Lambda, init_method="cov", auto_scale=False)
 				Theta_quic = model.fit(X_obs).precision_
 				A_quic = (np.abs(Theta_quic - np.diag(np.diag(Theta_quic))) != 0.0).astype(float)
-				f1 = f1_score(A[missing_idx], A_quic[missing_idx])
-				auc = roc_auc_score(A[missing_idx], A_quic[missing_idx])
+				metric_score = metric_fun(A[missing_idx], A_quic[missing_idx])
 		
-				output_results.append({"num_obs": num_obs, "lambda": lam, "f1": f1, "auc": auc})
+				output_results.append({"num_obs": num_obs, "lambda": lam, "metric": metric_score})
 		
 		pd.DataFrame(output_results).to_csv(output_file, mode='a', sep=";", header=not os.path.exists(output_file))
 		logger.info(f"Finished iteration.")

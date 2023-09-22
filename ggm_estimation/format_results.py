@@ -90,60 +90,26 @@ def plot_results(accuracy_dict, labels, title, output_file=None, colors=None,
         plt.show()
 
 
-def transform_results(results, methods):
-    results["real_values"] = results["real_values"].apply(lambda x: np.array(eval(x)))
-    for method in methods:
-        results[f"pred_{method}"] = results[f"pred_{method}"].apply(lambda x: np.array(eval(x)))
-        results[f"matched_{method}"] = results.apply(lambda row: np.mean(row[f"pred_{method}"] == row["real_values"]), axis=1)
-        results[f"f1_{method}"] = results.apply(lambda row: f1_score(row[f"pred_{method}"], row["real_values"]), axis=1)
+def plot_glasso_tuning(filename):
+    tuning_data = pd.read_csv(filename, sep=";").groupby(["num_obs", "lambda"])["metric"].mean().to_frame()
+    num_obs_list = tuning_data.index.get_level_values("num_obs").unique()
+    max_per_num_obs = tuning_data.groupby(level=0)['metric'].idxmax().apply(lambda x: x[1])
 
-    matched_edges = results[[f"matched_{method}" for method in methods]].mean()
-    matched_edges.index = [s[len("matched_"):] for s in matched_edges.index]
-    matched_edges.name = "matched_edges_mean"
+    popt, _ = curve_fit(_lambda_generic, max_per_num_obs.index, max_per_num_obs.values)
 
-    f1 = results[[f"f1_{method}" for method in methods]].mean()
-    f1.index = [s[len("f1_"):] for s in f1.index]
-    f1.name = "f1_score_mean"
-
-    matched_edges_std = results[[f"matched_{method}" for method in methods]].std()
-    matched_edges_std.index = [s[len("matched_"):] for s in matched_edges_std.index]
-    matched_edges_std.name = "matched_edges_std"
-
-    f1_std = results[[f"f1_{method}" for method in methods]].std()
-    f1_std.index = [s[len("f1_"):] for s in f1.index]
-    f1_std.name = "f1_score_std"
-
-    grouped_results = pd.merge(matched_edges, f1, left_index=True, right_index=True, how="outer")
-    # grouped_results = pd.merge(grouped_results, max_posterior, left_index=True, right_index=True, how="outer")
-    grouped_results = pd.merge(grouped_results, matched_edges_std, left_index=True, right_index=True, how="outer")
-    grouped_results = pd.merge(grouped_results, f1_std, left_index=True, right_index=True, how="outer")
-
-    try:
-        results["best_likelihood"] = results[[f"likelihood_{method}" for method in methods]].idxmax(axis=1)
-        
-        likelihoods = results[[f"likelihood_{method}" for method in methods]].mean()
-        likelihoods.index = [s[len("likelihood_"):] for s in likelihoods.index]
-        likelihoods.name = "likelihoods_mean"
-
-        max_posterior = results[[f"likelihood_{method}" for method in methods]].idxmax(axis=1).value_counts() / len(results)
-        max_posterior.index = [s[len("likelihood_"):] for s in max_posterior.index]
-        max_posterior.name = "max_posterior"
-
-        grouped_results = pd.merge(grouped_results, likelihoods, left_index=True, right_index=True, how="outer")
-    except:
-        pass
-    # grouped_results = grouped_results.fillna(0.0)
-
-    return grouped_results
-
-def show_results_table(grouped_results):
-    cm = mpl.colormaps["RdYlGn"]
-    cm_reversed = cm.reversed()
-
-    f1_range = (grouped_results['f1_score'].min(), grouped_results['f1_score'].max())
-    matched_edges_range = (grouped_results['matched_edges'].min(), grouped_results['matched_edges'].max())
-    max_posterior_range = (grouped_results['max_posterior'].min(), grouped_results['max_posterior'].max())
-
-    return grouped_results.style.background_gradient(cmap=cm, subset=['matched_edges'], vmin=matched_edges_range[0], vmax=matched_edges_range[1])\
-                                .background_gradient(cmap=cm_reversed, subset=['f1_score'], vmin=f1_range[0], vmax=f1_range[1])\
-                                .background_gradient(cmap=cm_reversed, subset=['max_posterior'], vmin=max_posterior_range[0], vmax=max_posterior_range[1])
+    _, axs = plt.subplots(1, 2, figsize=(12, 4))
+    for num_obs in num_obs_list:
+        axs[0].plot(tuning_data.loc[num_obs]["metric"].index, tuning_data.loc[num_obs]["metric"].values, label=rf"$k = {num_obs}$")
+    axs[1].plot(max_per_num_obs.index, max_per_num_obs.values, marker="o", label="Data")
+    axs[1].plot(num_obs_list, _lambda_generic(num_obs_list, *popt), label="New fit")
+    # axs[1].plot(num_obs_list, lambda_glasso_selector(graph_type, nans, n_proportional, one_zero_ratio)(num_obs_list).values, "--", label="Stored fit")
+    axs[0].set_xscale("log")
+    axs[0].set_xlabel(r"$\lambda$")
+    axs[0].set_ylabel(f"Metric")
+    axs[0].legend()
+    axs[1].set_xscale("log")
+    axs[1].set_xlabel(r"$k$")
+    axs[1].set_ylabel(r"Optimal $\lambda$")
+    axs[1].legend()
+    print(popt)
+    plt.show()
