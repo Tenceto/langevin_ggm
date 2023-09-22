@@ -56,5 +56,23 @@ def pad_adjs(ori_adj, node_number):
     a = torch.concatenate([a, torch.zeros([node_number - ori_len, node_number])], axis=0)
     return a
 
-def lambda_generic(a, b, c):
-	return lambda n: 1 / (a * np.log(n) ** 2 + b * np.log(n) + c)
+def _lambda_generic(n, a, b, c):
+	return 1 / (a * np.log(n) ** 2 + b * np.log(n) + c)
+
+def lambda_glasso_selector(graph_type, nans, nans_proportional, one_zero_ratio):
+    if graph_type == "ergm":
+        if nans == 30 and nans_proportional == False and one_zero_ratio == 0.5:
+            return lambda n: _lambda_generic(n, 2.69135693, 4.61820941, -13.35200138)
+    elif graph_type == "grids":
+        if nans == 30 and nans_proportional == False and one_zero_ratio == 0.5:
+            return lambda n: _lambda_generic(n, 4.87366705, -19.5206655, 48.02892549)
+    elif graph_type == "barabasi":
+        if nans == 30 and nans_proportional == False and one_zero_ratio == 0.5:
+            return lambda n: _lambda_generic(n, 3.93966846, -6.46266204, 10.46412147)
+    elif graph_type == "deezer":
+        if nans == 0.05 and nans_proportional == True and one_zero_ratio == 0.5:
+            return lambda n: _lambda_generic(n, 0.09569316, -21.02993316, 37.3193769)
+        elif nans == 0.5 and nans_proportional == True and one_zero_ratio is None:
+            return lambda n: _lambda_generic(n, 2.10615704, -5.49361124, 18.04472622)
+    else:
+        return None
