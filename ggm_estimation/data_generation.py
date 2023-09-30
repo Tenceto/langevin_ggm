@@ -83,6 +83,7 @@ def generate_barabasi_albert(nodes_list, m1, m2, p, n_sim, seed):
     for n in nodes_list:
         graphs.extend(_generate_barabasi_albert(n, m1, m2, p, n_sim // len(nodes_list), seed=n + seed))
     random.shuffle(graphs)
+    return graphs[:n_sim]
 
 def _generate_barabasi_albert(n, m1, m2, p, n_sim, seed):
     np.random.seed(seed)
