@@ -63,12 +63,24 @@ def lambda_glasso_selector(graph_type, nans, nans_proportional, one_zero_ratio):
     if graph_type == "ergm":
         if nans == 30 and nans_proportional == False and one_zero_ratio == 0.5:
             return lambda n: _lambda_generic(n, 2.69135693, 4.61820941, -13.35200138)
+        elif nans == 0.2 and nans_proportional == True and one_zero_ratio is None:
+            return lambda n: _lambda_generic(n, 4.61577605, -28.03207726, 78.38257537)
     elif graph_type == "grids":
         if nans == 30 and nans_proportional == False and one_zero_ratio == 0.5:
             return lambda n: _lambda_generic(n, 4.87366705, -19.5206655, 48.02892549)
+        elif nans == 0.1 and nans_proportional == True and one_zero_ratio is None:
+            return lambda n: _lambda_generic(n, 3.72769248, -18.51843188, 56.53676354)
+        # elif nans == 0.25 and nans_proportional == True and one_zero_ratio is None:
+        #     return lambda n: _lambda_generic(n, 4.61577605, -28.03207726, 78.38257537)
+        elif nans == 0.2 and nans_proportional == True and one_zero_ratio is None:
+            return lambda n: _lambda_generic(n, 4.61577605, -28.03207726, 78.38257537)
     elif graph_type == "barabasi":
         if nans == 30 and nans_proportional == False and one_zero_ratio == 0.5:
             return lambda n: _lambda_generic(n, 3.93966846, -6.46266204, 10.46412147)
+        elif nans == 0.1 and nans_proportional == True and one_zero_ratio is None:
+            return lambda n: _lambda_generic(n, 5.64944576, -40.62433766, 113.83848422)
+        elif nans == 0.1 and nans_proportional == True and one_zero_ratio == 0.2:
+            return lambda n: _lambda_generic(n, 15.3884894, -138.48359488, 363.68821508)
     elif graph_type == "deezer":
         if nans == 0.05 and nans_proportional == True and one_zero_ratio == 0.5:
             return lambda n: _lambda_generic(n, 0.09569316, -21.02993316, 37.3193769)

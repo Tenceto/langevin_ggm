@@ -13,9 +13,9 @@ import ggm_estimation.data_generation as gen
 
 
 logger_file = "tuning_glasso.log"
-graph_type = "deezer"
+graph_type = "grids"
 n_sim = 200
-nans = 0.5
+nans = 0.2
 one_zero_ratio = None
 n_proportional = True
 metric = "f1"
@@ -70,7 +70,7 @@ lambda_inf = 10000
 num_obs_list = np.logspace(np.log10(25), np.log10(1500), 6).astype(int)
 lambdas = np.logspace(-3, -1, 30)
 
-output_file = f"outputs/tuning_glasso_{graph_type}_{nans}_{n_proportional}_{one_zero_ratio}_{metric}.csv"
+output_file = f"outputs/tuning/tuning_glasso_{graph_type}_{nans}_{n_proportional}_{one_zero_ratio}_{metric}.csv"
 
 # Run your main script here:
 if __name__ == '__main__':
@@ -126,7 +126,7 @@ if __name__ == '__main__':
 				output_results.append({"num_obs": num_obs, "lambda": lam, "metric": metric_score})
 		
 		pd.DataFrame(output_results).to_csv(output_file, mode='a', sep=";", header=not os.path.exists(output_file))
-		logger.info(f"Finished iteration.")
+		logger.info(f"Finished iteration. Removed 0: {np.sum(A[missing_idx] == 0)}, Removed 1: {np.sum(A[missing_idx] == 1)}.")
 
 	logger.info(f"Finished all iterations.")
 
