@@ -15,22 +15,21 @@ from ggm_estimation.torch_load import load_model, score_edp_wrapper
 torch.set_default_device("cuda")
 torch.set_default_dtype(torch.float32)
 
-logger_file = "langevin_ggm.log"
-graph_type = "deezer"
-seed = 1994
+graph_type = "grids"
+logger_file = f"langevin_ggm_{graph_type}.log"
 
 # Settings
 
 # GMRF parameters
-num_obs_list = [25, 100, 350, 1300]
+obs_ratio_list = [0.15, 0.35, 0.85, 2.0]
 prior_Theta = lambda num_nodes: wishart(num_nodes, np.eye(num_nodes) * 10 / num_nodes)
 
 # Simulation parameters
 n_sim = 100
-nans = 0.5
+nans = 0.1
 one_zero_ratio = None
 n_proportional = True
-seed = 1994 # 6732 # np.random.randint(0, 1000)
+seed = 1994
 psd_trials = 10
 
 # Graph parameters
@@ -139,7 +138,10 @@ if __name__ == '__main__':
 		output_results = list()
 		np.random.seed(seed)
 
-		A_obs, X_obs = gen.simulate_ggm(A, num_obs_list[-1], 
+		n_missing = nans if n_proportional is False else np.ceil(nans * A.shape[0] * (A.shape[0] - 1) / 2)
+		max_num_obs = int(np.ceil(obs_ratio_list[-1] * n_missing))
+
+		A_obs, X_obs = gen.simulate_ggm(A, max_num_obs, 
 										nans, one_zero_ratio, n_proportional, psd_trials, prior_Theta, logger)
 		missing_idx = np.where(np.isnan(np.triu(A_obs)))
 		A_obs_torch = torch.tensor(A_obs)
@@ -160,7 +162,8 @@ if __name__ == '__main__':
 														  temperature=temperature, num_samples=1,
 														  seed=seed)
 
-		for num_obs in num_obs_list:
+		for obs_ratio in obs_ratio_list:
+			num_obs = int(np.ceil(obs_ratio * n_missing))
 			this_S = np.cov(X_obs[:num_obs], rowvar=False, ddof=0)
 
 			# A_langevin_likelihood = langevin_likelihood.generate_sample(A_obs_torch, X_obs[:num_obs], 
@@ -187,7 +190,8 @@ if __name__ == '__main__':
 			this_output = dict()
 
 			this_output["seed"] = seed
-			this_output["num_obs"] = num_obs
+			# this_output["num_obs"] = num_obs
+			this_output["obs_ratio"] = obs_ratio
 			# this_output["num_samples"] = num_samples
 			this_output["real_values"] = A[missing_idx].tolist()
 			for method, A_sampled in A_all.items():
@@ -198,7 +202,7 @@ if __name__ == '__main__':
 				this_output[f"pred_{method}"] = values_sampled
 			output_results.append(this_output)
 		
-			logger.info(f"Finished iteration.")
+			logger.info(f"Finished iteration. Seed: {seed}, k/|U| = {obs_ratio}, k = {num_obs}, |U|: {len(missing_idx[0])}")
 		pd.DataFrame(output_results).to_csv(output_file, mode='a', sep=";", header=not os.path.exists(output_file))
 
 		return
