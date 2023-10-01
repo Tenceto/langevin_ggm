@@ -67,20 +67,21 @@ def _select_threshold_validation_set(df_train, df_test, tuneable_methods, thresh
     return pd.DataFrame(final_scores)
 
 
-def plot_results(accuracy_dict, labels, title="", output_file=None, colors=None, 
+def plot_results(accuracy_dict, labels, title="", output_file=None, colors=None,
                  linestyles=None, xlabel=r"Number of observations $k$", ylabel="Edge prediction accuracy", logscale=True,
                  legend_loc="best", ylims=None, legend_ncol=1):
+    marker_list = ['o', 'v', '^', 's', 'p', 'x', '+']
     fig, ax = plt.subplots()
     if linestyles is None:
         linestyles = {method: "-" for method in accuracy_dict.keys()}
     accuracy_dict = {k: accuracy_dict[k] for k in labels.keys()}
-    for method in accuracy_dict.keys():
+    for i, method in enumerate(accuracy_dict.keys()):
         if colors is not None:
             ax.plot(list(accuracy_dict[method].keys()), list(accuracy_dict[method].values()),
-                     marker="o", label=labels[method], color=colors[method], linestyle=linestyles[method])
+                     marker=marker_list[i], label=labels[method], color=colors[method], linestyle=linestyles[method])
         else:
             ax.plot(list(accuracy_dict[method].keys()), list(accuracy_dict[method].values()),
-                     marker="o", label=labels[method], linestyle=linestyles[method])
+                     marker=marker_list[i], label=labels[method], linestyle=linestyles[method])
     if ylims is not None:
         ax.set_ylim(ylims)
     ax.legend(loc=legend_loc, ncol=legend_ncol)
