@@ -73,7 +73,8 @@ def _select_threshold_validation_set(df_train, df_test, tuneable_methods, thresh
 
 def plot_results(accuracy_dict, labels, title="", output_file=None, colors=None,
                  linestyles=None, xlabel=r"$k$", ylabel="Edge prediction accuracy", logscale=True,
-                 legend_loc="best", ylims=None, legend_ncol=1):
+                 legend_loc="best", ylims=None, legend_ncol=1, marker_size=6, linewidth=1.5,
+                 legend_out=False):
     
     marker_list = ['o', 'v', '^', 's', 'p', 'x', '+', 'P', 'd']
     
@@ -84,10 +85,13 @@ def plot_results(accuracy_dict, labels, title="", output_file=None, colors=None,
     for i, method in enumerate(accuracy_dict.keys()):
         if colors is not None:
             ax.plot(list(accuracy_dict[method].keys()), list(accuracy_dict[method].values()),
-                     marker=marker_list[i], label=labels[method], color=colors[method], linestyle=linestyles[method])
+                     marker=marker_list[i], label=labels[method], 
+                     color=colors[method], linestyle=linestyles[method],
+                     markersize=marker_size, linewidth=linewidth)
         else:
             ax.plot(list(accuracy_dict[method].keys()), list(accuracy_dict[method].values()),
-                     marker=marker_list[i], label=labels[method], linestyle=linestyles[method])
+                     marker=marker_list[i], label=labels[method], linestyle=linestyles[method],
+                     markersize=marker_size, linewidth=linewidth)
     if ylims is not None:
         ax.set_ylim(ylims)
     ax.legend(loc=legend_loc, ncol=legend_ncol)
