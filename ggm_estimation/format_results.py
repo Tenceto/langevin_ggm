@@ -76,7 +76,7 @@ def plot_results(accuracy_dict, labels, title="", output_file=None, colors=None,
                  legend_loc="best", ylims=None, legend_ncol=1, marker_size=6, linewidth=1.5,
                  legend_out=False):
     
-    marker_list = ['o', 'v', '^', 's', 'p', 'x', '+', 'P', 'd']
+    marker_list = ['o', 'v', '^', 's', 'p', 'P', '+', 'X', 'd']
     
     fig, ax = plt.subplots()
     if linestyles is None:
@@ -103,6 +103,12 @@ def plot_results(accuracy_dict, labels, title="", output_file=None, colors=None,
     ax.set_title(title)
     ax.set_xticks(list(accuracy_dict[method].keys()))
     ax.grid()
+    if legend_out:
+        # Shrink current axis by 20%
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+        # Put a legend to the right of the current axis
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     if output_file is not None:
         plt.savefig(output_file, bbox_inches="tight")
     else:
@@ -111,7 +117,7 @@ def plot_results(accuracy_dict, labels, title="", output_file=None, colors=None,
 
 def plot_glasso_tuning(filename, graph_type=None, nans=None, 
                        n_proportional=None, one_zero_ratio=None, metric="Accuracy",
-                       output_file=None):
+                       output_file=None, ylims=None, legend_loc="best", legend_ncol=1):
     tuning_data = pd.read_csv(filename, sep=";").groupby(["num_obs", "lambda"])["metric"].mean().to_frame()
     num_obs_list = tuning_data.index.get_level_values("num_obs").unique()
     max_per_num_obs = tuning_data.groupby(level=0)['metric'].idxmax().apply(lambda x: x[1])
@@ -130,6 +136,9 @@ def plot_glasso_tuning(filename, graph_type=None, nans=None,
     axs[0].set_ylabel(metric)
     axs[0].legend()
     axs[0].grid()
+    if ylims is not None:
+        axs[0].set_ylim(ylims)
+    axs[0].legend(loc=legend_loc, ncol=legend_ncol)
     axs[1].set_xscale("log")
     axs[1].set_xlabel(r"$k$")
     axs[1].set_ylabel(r"Optimal $\lambda$")
