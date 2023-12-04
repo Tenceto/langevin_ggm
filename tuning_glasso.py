@@ -13,9 +13,9 @@ import ggm_estimation.data_generation as gen
 
 
 logger_file = "tuning_glasso.log"
-graph_type = "grids"
+graph_type = "deezer"
 n_sim = 200
-nans = 0.2
+nans = 1.0
 one_zero_ratio = None
 n_proportional = True
 metric = "f1"

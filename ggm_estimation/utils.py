@@ -74,6 +74,10 @@ def lambda_glasso_selector(graph_type, nans, nans_proportional, one_zero_ratio):
         #     return lambda n: _lambda_generic(n, 4.61577605, -28.03207726, 78.38257537)
         elif nans == 0.2 and nans_proportional == True and one_zero_ratio is None:
             return lambda n: _lambda_generic(n, 4.61577605, -28.03207726, 78.38257537)
+        elif nans == 0.5 and nans_proportional == True and one_zero_ratio is None:
+            return lambda n: _lambda_generic(n, 3.86195781, -21.83851068, 66.09558828)
+        elif nans == 1.0 and nans_proportional == True and one_zero_ratio is None:
+            return lambda n: _lambda_generic(n, 3.8484164, -22.08741836, 67.14491246)
     elif graph_type == "barabasi":
         if nans == 30 and nans_proportional == False and one_zero_ratio == 0.5:
             return lambda n: _lambda_generic(n, 3.93966846, -6.46266204, 10.46412147)
@@ -86,5 +90,7 @@ def lambda_glasso_selector(graph_type, nans, nans_proportional, one_zero_ratio):
             return lambda n: _lambda_generic(n, 0.09569316, -21.02993316, 37.3193769)
         elif nans == 0.5 and nans_proportional == True and one_zero_ratio is None:
             return lambda n: _lambda_generic(n, 2.10615704, -5.49361124, 18.04472622)
+        elif nans == 1.0 and nans_proportional == True and one_zero_ratio is None:
+            return lambda n: _lambda_generic(n, 3.16160777, -17.52335464, 45.6692579)
     else:
         return None
