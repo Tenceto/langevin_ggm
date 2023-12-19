@@ -54,18 +54,21 @@ def compute_estimation_performance(filename, tuneable_methods, fixed_methods, tr
 def _select_threshold_validation_set(df_train, df_test, tuneable_methods, threshold_grid, metric_fun, col_x_axis):
     final_scores = dict()
     for method in tuneable_methods:
-        scores_per_threshold = []
-        for th in threshold_grid[method]:
-            df_train["metric"] = df_train.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"] >= th), axis=1)
-            scores = df_train.groupby(col_x_axis)['metric'].mean()
-            scores_per_threshold.append(scores.to_dict())
+        if metric_fun != roc_auc_score:
+            scores_per_threshold = []
+            for th in threshold_grid[method]:
+                df_train["metric"] = df_train.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"] >= th), axis=1)
+                scores = df_train.groupby(col_x_axis)['metric'].mean()
+                scores_per_threshold.append(scores.to_dict())
 
-        # Convert the list of dictionaries to a dictionary of lists
-        scores_per_threshold = {k: [dic[k] for dic in scores_per_threshold] for k in scores_per_threshold[0]}
-        # Get the best threshold for each case
-        best_thresholds = {k: threshold_grid[method][np.argmax(v)] for k, v in scores_per_threshold.items()}
+            # Convert the list of dictionaries to a dictionary of lists
+            scores_per_threshold = {k: [dic[k] for dic in scores_per_threshold] for k in scores_per_threshold[0]}
+            # Get the best threshold for each case
+            best_thresholds = {k: threshold_grid[method][np.argmax(v)] for k, v in scores_per_threshold.items()}
 
-        df_test['metric'] = df_test.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"] >= best_thresholds[row[col_x_axis]]), axis=1)
+            df_test['metric'] = df_test.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"] >= best_thresholds[row[col_x_axis]]), axis=1)
+        else:
+            df_test['metric'] = df_test.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"]), axis=1)
         final_scores[method] = df_test.groupby(col_x_axis)['metric'].mean().to_dict()
 
     return pd.DataFrame(final_scores)
