@@ -8,3 +8,5 @@ skggm==0.2.8
 cvxpy==1.4.1
 dgl==1.1.3
 easydict==1.11
+line_profiler==4.1.2
+ipywidgets==8.1.1
