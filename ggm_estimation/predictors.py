@@ -67,7 +67,7 @@ class LangevinEstimator:
         for sigma_i_idx, sigma_i_sq in enumerate(self.sigmas_sq):
             alpha = self.epsilon * sigma_i_sq / self.sigmas_sq[-1]
             sigma_i = np.sqrt(sigma_i_sq)
-            use_prior = self.use_prior and levels_no_prior >= sigma_i_idx
+            use_prior = self.use_prior #and levels_no_prior >= sigma_i_idx
 
             for _ in range(self.steps):
                 z = z_dist.sample([1])
