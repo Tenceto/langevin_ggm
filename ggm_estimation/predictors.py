@@ -3,7 +3,7 @@ import cvxpy as cp
 import torch
 from torch import nn
 import itertools
-from inverse_covariance import QuicGraphicalLasso
+from inverse_covariance import QuicGraphicalLasso, ModelAverage
 from dgl.nn import SAGEConv
 import torch.nn.functional as F
 import dgl
@@ -105,6 +105,52 @@ class LangevinEstimator:
         #     A_tilde[nan_idxs] = np.clip(prev_A_tilde[nan_idxs], min_clip, max_clip)
 
         return A_tilde
+
+class StabilitySelector:
+    def __init__(self, n_bootstrap, lambda_fun, mode="manual", n_jobs=1):
+        self.n_bootstrap = n_bootstrap
+        self.mode = mode
+        self.lambda_fun = lambda_fun
+        self.n_jobs = n_jobs
+    
+    def generate_sample(self, X_obs):
+        num_obs = X_obs.shape[0]
+        lam = self.lambda_fun(num_obs)
+
+        if self.mode == "manual":
+            model = QuicGraphicalLasso(lam=lam, init_method="cov", auto_scale=False, verbose=False)
+            supp_probs = list()
+            for i in range(self.n_bootstrap):
+                X_bootstrap = X_obs[np.random.choice(num_obs, num_obs, replace=True)]
+                model.fit(X_bootstrap)
+                supp_probs.append(model.precision_ != 0)
+            # Take the mean
+            supp_probs = np.mean(supp_probs, axis=0)
+        elif self.mode == "auto":
+            model = ModelAverage(
+                estimator=QuicGraphicalLasso(lam=lam, init_method="cov", auto_scale=False, verbose=False),
+                n_trials=self.n_bootstrap,
+                penalization="subsampling",
+                support_thresh=0.5,
+                n_jobs=self.n_jobs
+            )
+            model.fit(X_obs)
+            supp_probs = model.proportion_
+
+        return supp_probs
+
+    def predict_fixed(self, X_obs, margin):
+        pred = self.generate_sample(X_obs)
+        pred = self.threshold_probabilities(pred, margin)
+        return pred
+
+    @staticmethod
+    def threshold_probabilities(probs, margin):
+        pred = probs.copy()
+        pred[pred >= (0.5 + margin)] = 1
+        pred[pred <= (0.5 - margin)] = 0
+        pred[(pred != 0) & (pred != 1)] = np.nan
+        return pred
 
 
 class QuicEstimator:
