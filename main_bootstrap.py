@@ -129,13 +129,6 @@ if __name__ == '__main__':
 		_, X_obs = gen.simulate_ggm(A, max_num_obs, 
 									nans=1.0, one_zero_ratio=None, n_proportional=True, 
 									psd_trials=psd_trials, prior_Theta=prior_Theta, logger=logger)
-		
-		# Estimate A_obs with bootstrapped glasso
-		A_stability = stability_selector.generate_sample(X_obs)
-		A_obs = stability_selector.threshold_probabilities(A_stability, margin=margin)
-
-		missing_idx = np.where(np.isnan(np.triu(A_obs)))
-		A_obs_torch = torch.tensor(A_obs)
 
 		prior_A_score = score_edp_wrapper(model, num_nodes, len(sigmas), max_nodes)
 		
@@ -156,6 +149,13 @@ if __name__ == '__main__':
 		for obs_ratio in obs_ratio_list:
 			num_obs = int(np.ceil(obs_ratio * num_nodes))
 			this_S = np.cov(X_obs[:num_obs], rowvar=False, ddof=0)
+
+			# Estimate A_obs with bootstrapped glasso
+			A_stability = stability_selector.generate_sample(X_obs[:num_obs])
+			A_obs = stability_selector.threshold_probabilities(A_stability, margin=margin)
+
+			missing_idx = np.where(np.isnan(np.triu(A_obs)))
+			A_obs_torch = torch.tensor(A_obs)
 
 			# A_langevin_likelihood = langevin_likelihood.generate_sample(A_obs_torch, X_obs[:num_obs], 
 			# 												   			temperature=temperature, num_samples=10,
