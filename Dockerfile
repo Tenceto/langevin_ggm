@@ -18,3 +18,5 @@ RUN pip install -r requirements.txt
 RUN sed -i 's/sklearn.utils.testing/sklearn.utils._testing/g' /.local/lib/python3.8/site-packages/inverse_covariance/quic_graph_lasso.py
 RUN sed -i 's/sklearn.externals.joblib/joblib/g' /.local/lib/python3.8/site-packages/inverse_covariance/quic_graph_lasso.py
 RUN sed -i 's/sklearn.externals.joblib/joblib/g' /.local/lib/python3.8/site-packages/inverse_covariance/model_average.py
+# Remove the automatic verbosity
+RUN sed -i 's/_cpu_map(fun, param_grid, n_jobs, verbose=False)/_cpu_map(fun, param_grid, n_jobs, verbose=True)/g' /.local/lib/python3.8/site-packages/inverse_covariance/model_average.py
