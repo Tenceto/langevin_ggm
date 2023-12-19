@@ -14,6 +14,10 @@ RUN git clone https://github.com/Tenceto/langevin_ggm
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# Install LaTeX
+RUN sudo apt install texlive-fonts-recommended texlive-fonts-extra
+RUN sudo apt install dvipng cm-super
+
 # Make skggm compatible with current sklearn
 RUN sed -i 's/sklearn.utils.testing/sklearn.utils._testing/g' /.local/lib/python3.8/site-packages/inverse_covariance/quic_graph_lasso.py
 RUN sed -i 's/sklearn.externals.joblib/joblib/g' /.local/lib/python3.8/site-packages/inverse_covariance/quic_graph_lasso.py
