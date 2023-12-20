@@ -154,7 +154,8 @@ if __name__ == '__main__':
 			A_stability = stability_selector.generate_sample(X_obs[:num_obs])
 			A_obs = stability_selector.threshold_probabilities(A_stability, margin=margin)
 
-			missing_idx = np.where(np.isnan(np.triu(A_obs)))
+			missing_idx = np.triu_indices_from(A_obs, k=1) # np.where(np.isnan(np.triu(A_obs)))
+			estimated_unknown_idx = np.where(np.isnan(np.triu(A_obs)))
 			A_obs_torch = torch.tensor(A_obs)
 
 			# A_langevin_likelihood = langevin_likelihood.generate_sample(A_obs_torch, X_obs[:num_obs], 
@@ -193,8 +194,10 @@ if __name__ == '__main__':
 					values_sampled = A_sampled[missing_idx].cpu().numpy().tolist()
 				this_output[f"pred_{method}"] = values_sampled
 			output_results.append(this_output)
-		
-			logger.info(f"Finished iteration. Seed: {seed}, k/n = {obs_ratio}, k = {num_obs}, n = {num_nodes}, |U|: {len(missing_idx[0])}")
+
+			ratio_estimated_known = round(len(estimated_unknown_idx[0]) / (num_nodes * (num_nodes - 1) / 2), 2)
+
+			logger.info(f"Finished iteration. Seed: {seed}, k/n = {obs_ratio}, k = {num_obs}, n = {num_nodes}, |O| / dim(a): {ratio_estimated_known}")
 		pd.DataFrame(output_results).to_csv(output_file, mode='a', sep=";", header=not os.path.exists(output_file))
 
 		return
