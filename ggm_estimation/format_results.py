@@ -104,7 +104,8 @@ def plot_results(accuracy_dict, labels, title="", output_file=None, colors=None,
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.set_title(title)
-    ax.set_xticks(list(accuracy_dict[method].keys()))
+    ax.set_xticks(list(accuracy_dict[method].keys()), labels=list(accuracy_dict[method].keys()))
+    ax.set_xticks([], minor=True)
     ax.grid()
     if legend_out:
         # Shrink current axis by 20%
