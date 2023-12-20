@@ -10,7 +10,8 @@ from ggm_estimation.utils import _lambda_generic, lambda_glasso_selector
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
-def compute_estimation_performance(filename, tuneable_methods, fixed_methods, train_size, threshold_grid, metric, col_x_axis, n_splits=5):
+def compute_estimation_performance(filename, tuneable_methods, fixed_methods, train_size, threshold_grid, metric, col_x_axis, 
+                                   n_splits=5, agg_fun="mean"):
     if metric == "accuracy":
         metric_fun = accuracy_score
     elif metric == "f1":
@@ -37,7 +38,9 @@ def compute_estimation_performance(filename, tuneable_methods, fixed_methods, tr
             # print("Training samples:", df_train["seed"].nunique())
             # print("Test samples:", df_test["seed"].nunique())
 
-            final_scores = final_scores + _select_threshold_validation_set(df_train, df_test, tuneable_methods, threshold_grid, metric_fun, col_x_axis)
+            final_scores = final_scores + _select_threshold_validation_set(df_train, df_test, tuneable_methods, 
+                                                                           threshold_grid, metric_fun, col_x_axis, 
+                                                                           agg_fun)
         
         final_scores = (final_scores / n_splits).to_dict()
     
@@ -46,19 +49,25 @@ def compute_estimation_performance(filename, tuneable_methods, fixed_methods, tr
 
     for method in fixed_methods:
         df['metric'] = df.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"]), axis=1)
-        final_scores[method] = df.groupby(col_x_axis)['metric'].mean().to_dict()
+        if agg_fun == "mean":
+            final_scores[method] = df.groupby(col_x_axis)['metric'].mean().to_dict()
+        elif agg_fun == "median":
+            final_scores[method] = df.groupby(col_x_axis)['metric'].median().to_dict()
     
     return final_scores
 
 
-def _select_threshold_validation_set(df_train, df_test, tuneable_methods, threshold_grid, metric_fun, col_x_axis):
+def _select_threshold_validation_set(df_train, df_test, tuneable_methods, threshold_grid, metric_fun, col_x_axis, agg_fun):
     final_scores = dict()
     for method in tuneable_methods:
         if metric_fun != roc_auc_score:
             scores_per_threshold = []
             for th in threshold_grid[method]:
                 df_train["metric"] = df_train.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"] >= th), axis=1)
-                scores = df_train.groupby(col_x_axis)['metric'].mean()
+                if agg_fun == "mean":
+                    scores = df_train.groupby(col_x_axis)['metric'].mean()
+                elif agg_fun == "median":
+                    scores = df_train.groupby(col_x_axis)['metric'].median()
                 scores_per_threshold.append(scores.to_dict())
 
             # Convert the list of dictionaries to a dictionary of lists
@@ -69,7 +78,10 @@ def _select_threshold_validation_set(df_train, df_test, tuneable_methods, thresh
             df_test['metric'] = df_test.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"] >= best_thresholds[row[col_x_axis]]), axis=1)
         else:
             df_test['metric'] = df_test.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"]), axis=1)
-        final_scores[method] = df_test.groupby(col_x_axis)['metric'].mean().to_dict()
+        if agg_fun == "mean":
+            final_scores[method] = df_test.groupby(col_x_axis)['metric'].mean().to_dict()
+        elif agg_fun == "median":
+            final_scores[method] = df_test.groupby(col_x_axis)['metric'].median().to_dict()
 
     return pd.DataFrame(final_scores)
 
