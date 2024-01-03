@@ -162,18 +162,22 @@ class QuicEstimator:
         self.lambda_inf = lambda_inf
     
     def generate_sample(self, A_nan, X_obs):
-        diag_idxs = np.diag_indices_from(A_nan)
-        mask_inf_penalty = A_nan == 0
-        mask_inf_penalty[diag_idxs] = False
-        mask_unknown = np.isnan(A_nan)
-
-        Lambda = np.zeros(A_nan.shape)
         lambda_n = self.lambda_fun(X_obs.shape[0])
-        # The "infinite penalty" should not be ridiculously high
-        # Otherwise the algorithm becomes numerically unstable
-        # (Before I was using np.inf and it wasn't working properly)
-        Lambda[mask_inf_penalty] = self.lambda_inf
-        Lambda[mask_unknown] = lambda_n
+        if A_nan is not None:
+            diag_idxs = np.diag_indices_from(A_nan)
+            mask_inf_penalty = A_nan == 0
+            mask_inf_penalty[diag_idxs] = False
+            mask_unknown = np.isnan(A_nan)
+
+            Lambda = np.zeros(A_nan.shape)
+            # The "infinite penalty" should not be ridiculously high
+            # Otherwise the algorithm becomes numerically unstable
+            # (Before I was using np.inf and it wasn't working properly)
+            Lambda[mask_inf_penalty] = self.lambda_inf
+            Lambda[mask_unknown] = lambda_n
+        else:
+            Lambda = lambda_n
+        
         model = QuicGraphicalLasso(lam=Lambda, init_method="cov", auto_scale=False)
         Theta_quic = model.fit(X_obs).precision_
 
