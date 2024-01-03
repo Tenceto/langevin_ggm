@@ -137,6 +137,9 @@ class StabilitySelector:
             model.fit(X_obs)
             supp_probs = model.proportion_
 
+        # Put 0 in the diagonal
+        supp_probs[np.diag_indices_from(supp_probs)] = 0.0
+
         return supp_probs
 
     def predict_fixed(self, X_obs, margin):
