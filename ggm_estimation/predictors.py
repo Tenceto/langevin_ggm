@@ -113,9 +113,25 @@ class StabilitySelector:
         self.lambda_fun = lambda_fun
         self.n_jobs = n_jobs
     
-    def generate_sample(self, X_obs):
+    def generate_sample(self, X_obs, A_nan=None, lambda_inf=10000):
         num_obs = X_obs.shape[0]
-        lam = self.lambda_fun(num_obs)
+        lambda_n = self.lambda_fun(num_obs)
+
+        if A_nan is not None:
+            diag_idxs = np.diag_indices_from(A_nan)
+            mask_inf_penalty = A_nan == 0
+            mask_inf_penalty[diag_idxs] = False
+            mask_unknown = np.isnan(A_nan)
+
+            Lambda = np.zeros(A_nan.shape)
+            # The "infinite penalty" should not be ridiculously high
+            # Otherwise the algorithm becomes numerically unstable
+            # (Before I was using np.inf and it wasn't working properly)
+            Lambda[mask_inf_penalty] = lambda_inf
+            Lambda[mask_unknown] = lambda_n
+            lam = Lambda
+        else:
+            lam = lambda_n
 
         if self.mode == "manual":
             model = QuicGraphicalLasso(lam=lam, init_method="cov", auto_scale=False, verbose=False)
