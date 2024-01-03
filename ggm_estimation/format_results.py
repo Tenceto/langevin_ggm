@@ -30,6 +30,7 @@ def compute_estimation_performance(filename, tuneable_methods, fixed_methods, tr
         seeds = df["seed"].unique()
         print("Samples:", len(seeds))
         final_scores = 0
+        final_variances = 0
 
         for split in range(n_splits):
             train_seeds = np.random.choice(seeds, int(train_size * len(seeds)), replace=False)
@@ -38,11 +39,15 @@ def compute_estimation_performance(filename, tuneable_methods, fixed_methods, tr
             # print("Training samples:", df_train["seed"].nunique())
             # print("Test samples:", df_test["seed"].nunique())
 
-            final_scores = final_scores + _select_threshold_validation_set(df_train, df_test, tuneable_methods, 
-                                                                           threshold_grid, metric_fun, col_x_axis, 
-                                                                           agg_fun)
+            new_scores, new_variances = _select_threshold_validation_set(df_train, df_test, tuneable_methods, 
+                                                                         threshold_grid, metric_fun, col_x_axis, 
+                                                                         agg_fun)
+            
+            final_scores += new_scores
+            final_variances += new_variances
         
         final_scores = (final_scores / n_splits).to_dict()
+        final_stds = np.sqrt((final_variances / n_splits)).to_dict()
     
     if 'final_scores' not in locals():
         final_scores = dict()
@@ -53,12 +58,14 @@ def compute_estimation_performance(filename, tuneable_methods, fixed_methods, tr
             final_scores[method] = df.groupby(col_x_axis)['metric'].mean().to_dict()
         elif agg_fun == "median":
             final_scores[method] = df.groupby(col_x_axis)['metric'].median().to_dict()
+        final_stds[method] = df.groupby(col_x_axis)['metric'].std().to_dict()
     
-    return final_scores
+    return final_scores, final_stds
 
 
 def _select_threshold_validation_set(df_train, df_test, tuneable_methods, threshold_grid, metric_fun, col_x_axis, agg_fun):
     final_scores = dict()
+    final_variances = dict()
     for method in tuneable_methods:
         if metric_fun != roc_auc_score:
             scores_per_threshold = []
@@ -78,15 +85,18 @@ def _select_threshold_validation_set(df_train, df_test, tuneable_methods, thresh
             df_test['metric'] = df_test.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"] >= best_thresholds[row[col_x_axis]]), axis=1)
         else:
             df_test['metric'] = df_test.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"]), axis=1)
+        
         if agg_fun == "mean":
             final_scores[method] = df_test.groupby(col_x_axis)['metric'].mean().to_dict()
         elif agg_fun == "median":
             final_scores[method] = df_test.groupby(col_x_axis)['metric'].median().to_dict()
 
-    return pd.DataFrame(final_scores)
+        final_variances[method] = df_test.groupby(col_x_axis)['metric'].var().to_dict()
+
+    return pd.DataFrame(final_scores), pd.DataFrame(final_variances)
 
 
-def plot_results(accuracy_dict, labels, title="", output_file=None, colors=None,
+def plot_results(accuracy_dict, stds_grids=None, labels=None, title="", output_file=None, colors=None,
                  linestyles=None, xlabel=r"$k$", ylabel="Edge prediction accuracy", logscale=True,
                  legend_loc="best", ylims=None, legend_ncol=1, marker_size=6, linewidth=1.5,
                  legend_out=False):
@@ -98,15 +108,29 @@ def plot_results(accuracy_dict, labels, title="", output_file=None, colors=None,
         linestyles = {method: "-" for method in accuracy_dict.keys()}
     accuracy_dict = {k: accuracy_dict[k] for k in labels.keys()}
     for i, method in enumerate(accuracy_dict.keys()):
+        x_values = np.array(list(accuracy_dict[method].keys()))
+        y_values = np.array(list(accuracy_dict[method].values()))
+        if stds_grids is not None:
+            std_values = np.array(list(stds_grids[method].values()))
         if colors is not None:
-            ax.plot(list(accuracy_dict[method].keys()), list(accuracy_dict[method].values()),
+            ax.plot(x_values, y_values,
                      marker=marker_list[i], label=labels[method], 
                      color=colors[method], linestyle=linestyles[method],
                      markersize=marker_size, linewidth=linewidth)
+            if stds_grids is not None:
+                ax.fill_between(x_values, 
+                                y_values - std_values, 
+                                y_values + std_values, 
+                                color=colors[method], alpha=0.3)
         else:
-            ax.plot(list(accuracy_dict[method].keys()), list(accuracy_dict[method].values()),
+            ax.plot(x_values, y_values,
                      marker=marker_list[i], label=labels[method], linestyle=linestyles[method],
                      markersize=marker_size, linewidth=linewidth)
+            if stds_grids is not None:
+                ax.fill_between(x_values, 
+                                y_values - std_values, 
+                                y_values + std_values, 
+                                alpha=0.3)
     if ylims is not None:
         ax.set_ylim(ylims)
     ax.legend(loc=legend_loc, ncol=legend_ncol)
