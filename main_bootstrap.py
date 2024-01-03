@@ -17,14 +17,13 @@ torch.set_default_device("cuda")
 torch.set_default_dtype(torch.float32)
 # warnings.filterwarnings("error")
 
-
 graph_type = "deezer"
 logger_file = f"langevin_ggm_{graph_type}.log"
 
 # Settings
 
 # GMRF parameters
-obs_ratio_list = [0.15, 0.35, 0.85, 2.0]
+obs_ratio_list = [1.0, 1.8, 3.2, 5.6, 10.0]
 prior_Theta = lambda num_nodes: wishart(num_nodes, np.eye(num_nodes) * 10 / num_nodes)
 
 # Simulation parameters
@@ -81,7 +80,7 @@ temperature = 1.0
 num_samples = 10
 
 # Output file
-output_file = f"outputs/full_estimation_{seed}_{graph_type}_{num_samples}_{margin}_{n_bootstrap}.csv"
+output_file = f"outputs/full_vs_constrained_{seed}_{graph_type}_{num_samples}_{margin}_{n_bootstrap}.csv"
 
 # Lambda function
 lambda_fun = ut.lambda_glasso_selector(graph_type, nans=1.0, nans_proportional=True, one_zero_ratio=None)
@@ -94,7 +93,6 @@ if __name__ == '__main__':
 						level=logging.DEBUG)
 	logger = logging.getLogger('Langevin')
 	logger.info("Running Langevin Simulation")
-	logging.getLogger('rpy2.rinterface_lib.callbacks').disabled = True
 
 	def exc_handler(exctype, value, tb):
 		logger.exception(''.join(traceback.format_exception(exctype, value, tb)))
@@ -108,15 +106,10 @@ if __name__ == '__main__':
 
 	logger.info(f"Matrices generated.")
 
-	tiger = ggmp.TIGEREstimator(zero_tol=1.E-4)
+	# tiger = ggmp.TIGEREstimator(zero_tol=1.E-4)
 	quic = ggmp.QuicEstimator(lambda_fun)
 	# thresholder = ggmp.QuicEstimator(lambda x: 0.0)
 	stability_selector = ggmp.StabilitySelector(n_bootstrap, lambda_fun, mode="manual", n_jobs=1)
-
-	# We change the default device to cpu because GraphSAGE doesn't support CUDA
-	# torch.set_default_device("cpu")
-	# sage = ggmp.GNNEstimator(h_feats=32, lr=0.005, epochs=1000)
-	# torch.set_default_device("cuda")
 
 	def simulation_wrapper(args):
 		seed, A, logger = args
@@ -148,37 +141,47 @@ if __name__ == '__main__':
 
 		for obs_ratio in obs_ratio_list:
 			num_obs = int(np.ceil(obs_ratio * num_nodes))
-			this_S = np.cov(X_obs[:num_obs], rowvar=False, ddof=0)
+			# this_S = np.cov(X_obs[:num_obs], rowvar=False, ddof=0)
 
 			# Estimate A_obs with bootstrapped glasso
-			A_stability = stability_selector.generate_sample(X_obs[:num_obs])
-			A_obs = stability_selector.threshold_probabilities(A_stability, margin=margin)
+			A_stability_est = stability_selector.generate_sample(X_obs[:num_obs])
+			A_obs_est = stability_selector.threshold_probabilities(A_stability_est, margin=margin)
+			A_obs_real = A.copy()
+			A_obs_real[np.isnan(A_obs_est)] = np.nan
+			A_stability_real = stability_selector.generate_sample(X_obs[:num_obs], A_nan=A_obs_real)
 
-			missing_idx = np.triu_indices_from(A_obs, k=1) # np.where(np.isnan(np.triu(A_obs)))
-			estimated_unknown_idx = np.where(np.isnan(np.triu(A_obs)))
-			A_obs_torch = torch.tensor(A_obs)
+			triu_idx = np.triu_indices_from(A, k=1)
+			missing_idx = np.where(np.isnan(np.triu(A_obs_real, k=1)))
+
+			# assert np.all(A[np.where(~ np.isnan(A_obs_real))] == A_stability_real[np.where(~ np.isnan(A_obs_real))])
+			
+			A_obs_est_torch = torch.tensor(A_obs_est)
+			A_obs_real_torch = torch.tensor(A_obs_real)
 
 			# A_langevin_likelihood = langevin_likelihood.generate_sample(A_obs_torch, X_obs[:num_obs], 
 			# 												   			temperature=temperature, num_samples=10,
 			# 															seed=(seed + 1) * 3)
-			A_langevin_posterior = langevin_posterior.generate_sample(A_obs_torch, X_obs[:num_obs],
-															 		  temperature=temperature, num_samples=num_samples,
-																	  seed=(seed + 1) * 3)
+			A_lpost_est = langevin_posterior.generate_sample(A_obs_est_torch, X_obs[:num_obs],
+															 temperature=temperature, num_samples=num_samples,
+															 seed=(seed + 1) * 3)
+			A_lpost_real = langevin_posterior.generate_sample(A_obs_real_torch, X_obs[:num_obs],
+													 		  temperature=temperature, num_samples=num_samples,
+															  seed=(seed + 1) * 3)
+
+			# assert torch.all(torch.Tensor(A).cuda()[torch.where(~ torch.isnan(A_obs_real_torch))] == A_lpost_real[torch.where(~ torch.isnan(A_obs_real_torch))]).item()
 			
 			A_all = {
-				"langevin_posterior": A_langevin_posterior, 
+				"langevin_posterior": A_lpost_est,
+				"langevin_posterior_constrained": A_lpost_real,
 				# "langevin_prior": A_langevin_prior,
 				# "langevin_likelihood": A_langevin_likelihood,
-				"glasso": quic.generate_sample(A_obs, X_obs[:num_obs]),
-				"tiger": tiger.generate_sample(A_obs, this_S, X_obs[:num_obs]),
-				"stability": A_stability,
+				"glasso": quic.generate_sample(None, X_obs[:num_obs]),
+				"glasso_constrained": quic.generate_sample(A_obs_real, X_obs[:num_obs]),
+				# "tiger": tiger.generate_sample(A_obs, this_S, X_obs[:num_obs]),
+				"stability": A_stability_est,
+				"stability_constrained": A_stability_real,
 				# "threshold": thresholder.generate_sample(A_obs, X_obs[:num_obs]),
 			}
-
-			# We change the default device to cpu because GraphSAGE doesn't support CUDA
-			# torch.set_default_device("cpu")
-			# A_all.update({"gnn": sage.generate_sample(A_obs, X_obs[:num_obs])})
-			# torch.set_default_device("cuda")
 
 			this_output = dict()
 
@@ -186,18 +189,20 @@ if __name__ == '__main__':
 			# this_output["num_obs"] = num_obs
 			this_output["obs_ratio"] = obs_ratio
 			# this_output["num_samples"] = num_samples
+			# this_output["real_values"] = A[triu_idx].tolist()
 			this_output["real_values"] = A[missing_idx].tolist()
-			for method, A_sampled in A_all.items():
+
+			for method, A_estimated, in A_all.items():
 				try:
-					values_sampled = A_sampled[missing_idx].tolist()
+					values_sampled = A_estimated[missing_idx].tolist()
 				except:
-					values_sampled = A_sampled[missing_idx].cpu().numpy().tolist()
+					values_sampled = A_estimated[missing_idx].cpu().numpy().tolist()
 				this_output[f"pred_{method}"] = values_sampled
 			output_results.append(this_output)
 
-			ratio_estimated_known = round(len(estimated_unknown_idx[0]) / (num_nodes * (num_nodes - 1) / 2), 2)
+			ratio_unknown = round(len(missing_idx[0]) / (num_nodes * (num_nodes - 1) / 2), 2)
 
-			logger.info(f"Finished iteration. Seed: {seed}, k/n = {obs_ratio}, k = {num_obs}, n = {num_nodes}, |O| / dim(a): {ratio_estimated_known}")
+			logger.info(f"Finished iteration. Seed: {seed}, k/n = {obs_ratio}, k = {num_obs}, n = {num_nodes}, |U| / dim(a): {ratio_unknown}")
 		pd.DataFrame(output_results).to_csv(output_file, mode='a', sep=";", header=not os.path.exists(output_file))
 
 		return
