@@ -23,14 +23,14 @@ logger_file = f"langevin_ggm_{graph_type}.log"
 # Settings
 
 # GMRF parameters
-obs_ratio_list = [1.0, 1.8, 3.2, 5.6, 10.0]
+obs_ratio_list = [1.8, 3.2, 5.6, 10.0]
 prior_Theta = lambda num_nodes: wishart(num_nodes, np.eye(num_nodes) * 10 / num_nodes)
 
 # Simulation parameters
 n_sim = 100
-seed = 1994
+seed = 123456
 psd_trials = 10
-margin = 0.3
+margins = [0.2, 0.3, 0.4, 0.45]
 n_bootstrap = 50
 
 # Graph parameters
@@ -80,7 +80,7 @@ temperature = 1.0
 num_samples = 10
 
 # Output file
-output_file = f"outputs/full_vs_constrained_{seed}_{graph_type}_{num_samples}_{margin}_{n_bootstrap}.csv"
+output_file = f"outputs/full_{seed}_{graph_type}_{num_samples}_{margins}_{n_bootstrap}.csv"
 
 # Lambda function
 lambda_fun = ut.lambda_glasso_selector(graph_type, nans=1.0, nans_proportional=True, one_zero_ratio=None)
@@ -106,9 +106,7 @@ if __name__ == '__main__':
 
 	logger.info(f"Matrices generated.")
 
-	# tiger = ggmp.TIGEREstimator(zero_tol=1.E-4)
 	quic = ggmp.QuicEstimator(lambda_fun)
-	# thresholder = ggmp.QuicEstimator(lambda x: 0.0)
 	stability_selector = ggmp.StabilitySelector(n_bootstrap, lambda_fun, mode="manual", n_jobs=1)
 
 	def simulation_wrapper(args):
@@ -124,83 +122,60 @@ if __name__ == '__main__':
 									psd_trials=psd_trials, prior_Theta=prior_Theta, logger=logger)
 
 		prior_A_score = score_edp_wrapper(model, num_nodes, len(sigmas), max_nodes)
-		
-		# langevin_prior = ggmp.LangevinEstimator(sigmas=sigmas, epsilon=epsilon, 
-		# 									  	steps=steps, score_estimator=prior_A_score,
-		# 										use_likelihood=False, use_prior=True)
-		# langevin_likelihood = ggmp.LangevinEstimator(sigmas=sigmas, epsilon=epsilon,
-		# 									   		 steps=steps, score_estimator=prior_A_score,
-		# 											 use_likelihood=True, use_prior=False)
+
 		langevin_posterior = ggmp.LangevinEstimator(sigmas=sigmas, epsilon=epsilon,
 											  		steps=steps, score_estimator=prior_A_score,
 													use_likelihood=True, use_prior=True)
-		
-		# A_langevin_prior = langevin_prior.generate_sample(A_obs_torch, X_obs=None, 
-		# 												  temperature=temperature, num_samples=1,
-		# 												  seed=seed)
 
 		for obs_ratio in obs_ratio_list:
 			num_obs = int(np.ceil(obs_ratio * num_nodes))
-			# this_S = np.cov(X_obs[:num_obs], rowvar=False, ddof=0)
-
 			# Estimate A_obs with bootstrapped glasso
 			A_stability_est = stability_selector.generate_sample(X_obs[:num_obs])
-			A_obs_est = stability_selector.threshold_probabilities(A_stability_est, margin=margin)
-			A_obs_real = A.copy()
-			A_obs_real[np.isnan(A_obs_est)] = np.nan
-			A_stability_real = stability_selector.generate_sample(X_obs[:num_obs], A_nan=A_obs_real)
 
-			triu_idx = np.triu_indices_from(A, k=1)
-			missing_idx = np.where(np.isnan(np.triu(A_obs_real, k=1)))
-
-			# assert np.all(A[np.where(~ np.isnan(A_obs_real))] == A_stability_real[np.where(~ np.isnan(A_obs_real))])
-			
-			A_obs_est_torch = torch.tensor(A_obs_est)
-			A_obs_real_torch = torch.tensor(A_obs_real)
-
-			# A_langevin_likelihood = langevin_likelihood.generate_sample(A_obs_torch, X_obs[:num_obs], 
-			# 												   			temperature=temperature, num_samples=10,
-			# 															seed=(seed + 1) * 3)
-			A_lpost_est = langevin_posterior.generate_sample(A_obs_est_torch, X_obs[:num_obs],
-															 temperature=temperature, num_samples=num_samples,
-															 seed=(seed + 1) * 3)
-			A_lpost_real = langevin_posterior.generate_sample(A_obs_real_torch, X_obs[:num_obs],
-													 		  temperature=temperature, num_samples=num_samples,
-															  seed=(seed + 1) * 3)
-
-			# assert torch.all(torch.Tensor(A).cuda()[torch.where(~ torch.isnan(A_obs_real_torch))] == A_lpost_real[torch.where(~ torch.isnan(A_obs_real_torch))]).item()
-			
 			A_all = {
-				"langevin_posterior": A_lpost_est,
-				"langevin_posterior_constrained": A_lpost_real,
-				# "langevin_prior": A_langevin_prior,
-				# "langevin_likelihood": A_langevin_likelihood,
 				"glasso": quic.generate_sample(None, X_obs[:num_obs]),
-				"glasso_constrained": quic.generate_sample(A_obs_real, X_obs[:num_obs]),
-				# "tiger": tiger.generate_sample(A_obs, this_S, X_obs[:num_obs]),
 				"stability": A_stability_est,
-				"stability_constrained": A_stability_real,
-				# "threshold": thresholder.generate_sample(A_obs, X_obs[:num_obs]),
 			}
 
-			this_output = dict()
+			ratio_unknown = list()
+			# Langevin without stability selection
+			A_obs_est = torch.full(A.shape, torch.nan)
+			A_obs_est = A_obs_est.fill_diagonal_(0.0)
+			unknown_idx = torch.where(torch.isnan(torch.triu(A_obs_est, diagonal=1)))
+			A_langevin = langevin_posterior.generate_sample(A_obs_est, X_obs[:num_obs],
+															temperature=temperature, num_samples=num_samples,
+															seed=(seed + 1) * 3)
+			A_all[f"langevin_flat"] = A_langevin
+			ratio = len(unknown_idx[0]) / (num_nodes * (num_nodes - 1) / 2)
+			ratio_unknown.append(round(ratio, 2))
+			
+			# Langevin with stability selection
+			for margin in margins:
+				A_obs_est = stability_selector.threshold_probabilities(A_stability_est, margin=margin)
+				A_obs_est = torch.tensor(A_obs_est)
+				unknown_idx = torch.where(torch.isnan(torch.triu(A_obs_est, diagonal=1)))
+				A_langevin = langevin_posterior.generate_sample(A_obs_est, X_obs[:num_obs],
+															 	temperature=temperature, num_samples=num_samples,
+															 	seed=(seed + 1) * 3)
+				A_all[f"langevin_{margin}"] = A_langevin
+				ratio = len(unknown_idx[0]) / (num_nodes * (num_nodes - 1) / 2)
+				ratio_unknown.append(round(ratio, 2))
+			
+			triu_idx = np.triu_indices_from(A, k=1)
 
+			this_output = dict()
 			this_output["seed"] = seed
-			# this_output["num_obs"] = num_obs
 			this_output["obs_ratio"] = obs_ratio
-			# this_output["num_samples"] = num_samples
-			# this_output["real_values"] = A[triu_idx].tolist()
-			this_output["real_values"] = A[missing_idx].tolist()
+			this_output["real_values"] = A[triu_idx].tolist()
+			this_output["ratio_unknown"] = ratio_unknown
 
 			for method, A_estimated, in A_all.items():
 				try:
-					values_sampled = A_estimated[missing_idx].tolist()
+					values_sampled = A_estimated[triu_idx].tolist()
 				except:
-					values_sampled = A_estimated[missing_idx].cpu().numpy().tolist()
+					values_sampled = A_estimated[triu_idx].cpu().numpy().tolist()
 				this_output[f"pred_{method}"] = values_sampled
 			output_results.append(this_output)
-
-			ratio_unknown = round(len(missing_idx[0]) / (num_nodes * (num_nodes - 1) / 2), 2)
 
 			logger.info(f"Finished iteration. Seed: {seed}, k/n = {obs_ratio}, k = {num_obs}, n = {num_nodes}, |U| / dim(a): {ratio_unknown}")
 		pd.DataFrame(output_results).to_csv(output_file, mode='a', sep=";", header=not os.path.exists(output_file))
@@ -214,9 +189,5 @@ if __name__ == '__main__':
 			except RuntimeError:
 				logger.exception(f"Runtime error in iteration.")
 				continue
-		# pool = Pool(5)
-		# simulation_results = pool.map(simulation_wrapper, simulation_args)
 
 	logger.info(f"Finished all iterations.")
-
-	# pd.DataFrame(simulation_results).to_csv(output_file, sep=";")
