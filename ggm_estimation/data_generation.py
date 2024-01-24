@@ -3,7 +3,7 @@ import networkx as nx
 import itertools
 import random
 import pickle as pkl
-from rpy2 import robjects
+# from rpy2 import robjects
 
 import ggm_estimation.utils as ut
 
@@ -36,36 +36,36 @@ def simulate_ggm(A, n_obs, nans, one_zero_ratio, n_proportional, psd_trials, pri
 		return A_obs, X_obs
 
 
-def generate_ergm(nodes, betas, n_sim, seed_r):
-    assert len(betas) == 2
+# def generate_ergm(nodes, betas, n_sim, seed_r):
+#     assert len(betas) == 2
     
-    betas_str = ", ".join([str(theta) for theta in betas])
+#     betas_str = ", ".join([str(theta) for theta in betas])
 
-    string_for_r = (
-        f"library(ergm)\n"
-        f"f = function(){{\n"
-        f"  set.seed({seed_r})\n"
-        f"  n = {nodes}\n"
-        f"  output = list()\n"
-        f"  betas = c({betas_str})\n"
-        f"      for(i in 1:{n_sim}){{\n"
-        f"          g_basis = network(n, directed=FALSE)\n"
-        f"          g_sim = simulate( ~ altkstar(0.3, fixed=TRUE) + edges,\n"
-        f"                           nsim=1,\n"
-        f"                           coef=betas,\n"
-        f"                           basis=g_basis)\n"
-        f"          output[[i]] = as.matrix(g_sim)\n"
-        f"    }}\n"
-        f"    return(output)\n"
-        f"}}\n"
-    )
+#     string_for_r = (
+#         f"library(ergm)\n"
+#         f"f = function(){{\n"
+#         f"  set.seed({seed_r})\n"
+#         f"  n = {nodes}\n"
+#         f"  output = list()\n"
+#         f"  betas = c({betas_str})\n"
+#         f"      for(i in 1:{n_sim}){{\n"
+#         f"          g_basis = network(n, directed=FALSE)\n"
+#         f"          g_sim = simulate( ~ altkstar(0.3, fixed=TRUE) + edges,\n"
+#         f"                           nsim=1,\n"
+#         f"                           coef=betas,\n"
+#         f"                           basis=g_basis)\n"
+#         f"          output[[i]] = as.matrix(g_sim)\n"
+#         f"    }}\n"
+#         f"    return(output)\n"
+#         f"}}\n"
+#     )
 
-    robjects.r(string_for_r)
+#     robjects.r(string_for_r)
 
-    graphs = robjects.r['f']()
-    graphs = [np.array(graph) for graph in graphs]
+#     graphs = robjects.r['f']()
+#     graphs = [np.array(graph) for graph in graphs]
 
-    return graphs
+#     return graphs
 
 def load_graph_dataset(filename, n_sim):
     with open(filename, "rb") as f:

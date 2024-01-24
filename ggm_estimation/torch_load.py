@@ -23,7 +23,7 @@ def score_edp_wrapper(model, nodes, num_sigmas, max_nodes):
 	def score_fun(A_tilde, U_idxs_triu, sigma_idx):
 		model_input = torch.zeros((num_sigmas, max_nodes, max_nodes), device="cuda").float()
 		padded_A_tilde = mtx.pad_adjs(A_tilde, max_nodes)
-		model_input[num_sigmas - sigma_idx - 1, :, :] = torch.tensor(padded_A_tilde, device="cuda").float()
+		model_input[num_sigmas - sigma_idx - 1, :, :] = padded_A_tilde.clone().detach().float().to("cuda")
 
 		with torch.no_grad():
 			all_score_levels = model(x, model_input, node_flags)
