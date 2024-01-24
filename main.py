@@ -15,7 +15,7 @@ from ggm_estimation.torch_load import load_model, score_edp_wrapper
 torch.set_default_device("cuda")
 torch.set_default_dtype(torch.float32)
 
-graph_type = "deezer"
+graph_type = "grids"
 logger_file = f"langevin_ggm_{graph_type}.log"
 
 # Settings
@@ -26,7 +26,7 @@ prior_Theta = lambda num_nodes: wishart(num_nodes, np.eye(num_nodes) * 10 / num_
 
 # Simulation parameters
 n_sim = 100
-nans = 1.0
+nans = 0.1
 one_zero_ratio = None
 n_proportional = True
 seed = 1994
@@ -95,10 +95,9 @@ epsilon = 1.0E-6
 steps = 300
 temperature = 1.0
 num_samples = 10
-levels_no_prior = 5
 
 # Output file
-output_file = f"outputs/new_results_{graph_type}_{nans}_{n_proportional}_{one_zero_ratio}_{num_samples}_{levels_no_prior}.csv"
+output_file = f"outputs/results_{graph_type}_{nans}_{n_proportional}_{one_zero_ratio}_{num_samples}.csv"
 
 # Lambda function
 lambda_fun = ut.lambda_glasso_selector(graph_type, nans, n_proportional, one_zero_ratio)
@@ -125,14 +124,14 @@ if __name__ == '__main__':
 
 	logger.info(f"Matrices generated.")
 
-	# tiger = ggmp.TIGEREstimator(zero_tol=1.E-4)
+	tiger = ggmp.TIGEREstimator(zero_tol=1.E-4)
 	quic = ggmp.QuicEstimator(lambda_fun)
-	# thresholder = ggmp.QuicEstimator(lambda x: 0.0)
+	thresholder = ggmp.QuicEstimator(lambda x: 0.0)
 
 	# We change the default device to cpu because GraphSAGE doesn't support CUDA
-	# torch.set_default_device("cpu")
-	# sage = ggmp.GNNEstimator(h_feats=32, lr=0.005, epochs=1000)
-	# torch.set_default_device("cuda")
+	torch.set_default_device("cpu")
+	sage = ggmp.GNNEstimator(h_feats=32, lr=0.005, epochs=1000)
+	torch.set_default_device("cuda")
 
 	def simulation_wrapper(args):
 		seed, A, logger = args
@@ -149,50 +148,44 @@ if __name__ == '__main__':
 
 		prior_A_score = score_edp_wrapper(model, A.shape[0], len(sigmas), max_nodes)
 		
-		# langevin_prior = ggmp.LangevinEstimator(sigmas=sigmas, epsilon=epsilon, 
-		# 									  	steps=steps, score_estimator=prior_A_score,
-		# 										use_likelihood=False, use_prior=True)
-		langevin_likelihood = ggmp.LangevinEstimator(sigmas=sigmas, epsilon=epsilon,
-											   		 steps=steps, score_estimator=prior_A_score,
-													 use_likelihood=True, use_prior=False)
+		langevin_prior = ggmp.LangevinEstimator(sigmas=sigmas, epsilon=epsilon, 
+											  	steps=steps, score_estimator=prior_A_score,
+												use_likelihood=False, use_prior=True)
+		# langevin_likelihood = ggmp.LangevinEstimator(sigmas=sigmas, epsilon=epsilon,
+		# 									   		 steps=steps, score_estimator=prior_A_score,
+		# 											 use_likelihood=True, use_prior=False)
 		langevin_posterior = ggmp.LangevinEstimator(sigmas=sigmas, epsilon=epsilon,
 											  		steps=steps, score_estimator=prior_A_score,
 													use_likelihood=True, use_prior=True)
 		
-		# A_langevin_prior = langevin_prior.generate_sample(A_obs_torch, X_obs=None, 
-		# 												  temperature=temperature, num_samples=1,
-		# 												  seed=seed)
+		A_langevin_prior = langevin_prior.generate_sample(A_obs_torch, X_obs=None, 
+														  temperature=temperature, num_samples=1,
+														  seed=seed)
 
 		for obs_ratio in obs_ratio_list:
 			num_obs = int(np.ceil(obs_ratio * n_missing))
-			# this_S = np.cov(X_obs[:num_obs], rowvar=False, ddof=0)
+			this_S = np.cov(X_obs[:num_obs], rowvar=False, ddof=0)
 
-			A_langevin_likelihood = langevin_likelihood.generate_sample(A_obs_torch, X_obs[:num_obs], 
-															   			temperature=temperature, num_samples=10,
-																		seed=(seed + 1) * 3)
-			A_langevin_pos_level = langevin_posterior.generate_sample(A_obs_torch, X_obs[:num_obs],
-															 		  temperature=temperature, num_samples=num_samples,
-																	  seed=(seed + 1) * 3,
-																	  levels_no_prior=levels_no_prior)
+			# A_langevin_likelihood = langevin_likelihood.generate_sample(A_obs_torch, X_obs[:num_obs], 
+			# 												   			temperature=temperature, num_samples=10,
+			# 															seed=(seed + 1) * 3)
 			A_langevin_posterior = langevin_posterior.generate_sample(A_obs_torch, X_obs[:num_obs],
 															 		  temperature=temperature, num_samples=num_samples,
-																	  seed=(seed + 1) * 3,
-																	  levels_no_prior=0)
+																	  seed=(seed + 1) * 3)
 			
 			A_all = {
 				"langevin_posterior": A_langevin_posterior, 
-				# "langevin_prior": A_langevin_prior,
-				"langevin_likelihood": A_langevin_likelihood,
-				"langevin_pos_level": A_langevin_pos_level,
+				"langevin_prior": A_langevin_prior,
+				# "langevin_likelihood": A_langevin_likelihood,
 				"glasso": quic.generate_sample(A_obs, X_obs[:num_obs]),
-				# "tiger": tiger.generate_sample(A_obs, this_S, X_obs[:num_obs]),
-				# "threshold": thresholder.generate_sample(A_obs, X_obs[:num_obs]),
+				"tiger": tiger.generate_sample(A_obs, this_S, X_obs[:num_obs]),
+				"threshold": thresholder.generate_sample(A_obs, X_obs[:num_obs]),
 			}
 
 			# We change the default device to cpu because GraphSAGE doesn't support CUDA
-			# torch.set_default_device("cpu")
-			# A_all.update({"gnn": sage.generate_sample(A_obs, X_obs[:num_obs])})
-			# torch.set_default_device("cuda")
+			torch.set_default_device("cpu")
+			A_all.update({"gnn": sage.generate_sample(A_obs, X_obs[:num_obs])})
+			torch.set_default_device("cuda")
 
 			this_output = dict()
 
