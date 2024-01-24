@@ -51,6 +51,8 @@ def compute_estimation_performance(filename, tuneable_methods, fixed_methods, tr
     
     if 'final_scores' not in locals():
         final_scores = dict()
+    if 'final_stds' not in locals():
+        final_stds = dict()
 
     for method in fixed_methods:
         df['metric'] = df.apply(lambda row: metric_fun(row["real_values"], row[f"pred_{method}"]), axis=1)
