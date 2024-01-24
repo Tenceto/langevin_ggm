@@ -31,7 +31,7 @@ class LangevinEstimator:
 
         return Theta_quic
     
-    def generate_sample(self, A_nan, X_obs, temperature=1.0, num_samples=1, seed=None, levels_no_prior=0):
+    def generate_sample(self, A_nan, X_obs, temperature=1.0, num_samples=1, seed=None):
         U_idxs_triu = torch.where(torch.isnan(torch.triu(A_nan)))
         O_mask = ~ torch.isnan(A_nan)
         if self.use_likelihood:
@@ -49,12 +49,12 @@ class LangevinEstimator:
             if seed is not None:
                 torch.manual_seed(seed + m)
                 np.random.seed(seed + m)
-            this_A = self._generate_individual_sample(A_nan, S, Theta_est, temperature, levels_no_prior, U_idxs_triu, O_mask, num_obs)
+            this_A = self._generate_individual_sample(A_nan, S, Theta_est, temperature, U_idxs_triu, O_mask, num_obs)
             As.append(this_A)
         A = torch.stack(As).mean(dim=0)
         return A
 
-    def _generate_individual_sample(self, A_nan, S, Theta_est, temperature, levels_no_prior, U_idxs_triu, O_mask, num_obs):
+    def _generate_individual_sample(self, A_nan, S, Theta_est, temperature, U_idxs_triu, O_mask, num_obs):
         size_U = len(U_idxs_triu[0])
         I = torch.eye(A_nan.shape[0])
         z_dist = torch.distributions.MultivariateNormal(torch.zeros(size_U), torch.eye(size_U))
@@ -67,12 +67,11 @@ class LangevinEstimator:
         for sigma_i_idx, sigma_i_sq in enumerate(self.sigmas_sq):
             alpha = self.epsilon * sigma_i_sq / self.sigmas_sq[-1]
             sigma_i = np.sqrt(sigma_i_sq)
-            use_prior = self.use_prior #and levels_no_prior >= sigma_i_idx
 
             for _ in range(self.steps):
                 z = z_dist.sample([1])
 
-                if use_prior:
+                if self.use_prior:
                     score_prior = self.score_estimator(A_tilde, U_idxs_triu, sigma_idx=sigma_i_idx)
                 else:
                     score_prior = 0.0
