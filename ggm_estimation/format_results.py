@@ -101,9 +101,10 @@ def _select_threshold_validation_set(df_train, df_test, tuneable_methods, thresh
 def plot_results(accuracy_dict, stds_grids=None, labels=None, title="", output_file=None, colors=None,
                  linestyles=None, xlabel=r"$k$", ylabel="Edge prediction accuracy", logscale=True,
                  legend_loc="best", ylims=None, legend_ncol=1, marker_size=6, linewidth=1.5,
-                 legend_out=False):
+                 legend_out=False, marker_list=None):
     
-    marker_list = ['o', 'v', '^', 's', 'p', 'P', '+', 'X', 'd']
+    if marker_list is None:
+        marker_list = ['o', 'v', '^', 's', 'p', 'P', '+', 'X', 'd']
     
     fig, ax = plt.subplots()
     if linestyles is None:
@@ -144,7 +145,8 @@ def plot_results(accuracy_dict, stds_grids=None, labels=None, title="", output_f
     ax.set_title(title)
     ax.set_xticks(list(accuracy_dict[method].keys()), labels=list(accuracy_dict[method].keys()))
     ax.set_xticks([], minor=True)
-    ax.grid()
+    # Add only horizontal gridlines
+    ax.yaxis.grid(True)
     if legend_out:
         # Shrink current axis by 20%
         box = ax.get_position()
