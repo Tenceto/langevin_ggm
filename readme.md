@@ -64,7 +64,7 @@ It works similarly to the previous one.
 Just adapt the parameters of the simulation at the beginning of the file, and run the script.
 The output can be analyzed in `notebooks/plot_results.ipynb` by plotting the metric curves.
 
-### Experiments with partially fully unknown graphs(`main_bootstrap.py`)
+### Experiments with fully unknown graphs(`main_bootstrap.py`)
 
 This script covers the case in which the graph is fully unknown and it has to be estimated altogether (as in the last experiment in Section 4 of our original paper).
 Notice that in order to use this method, it is necessary to have a graphical lasso tuned beforehand to the specific simulation (i.e., with the whole graph being unknown for the corresponding type of graph prior).
