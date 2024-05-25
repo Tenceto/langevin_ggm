@@ -1,0 +1,35 @@
+device: cuda:1
+
+graph_generation:
+  method: generate_ergm
+  params:
+    num_nodes: 50
+    betas: [0.7, -2.0]
+    n_sim: 50
+
+score_model:
+  model_file: ergm_aks_1000.pth
+  max_nodes: 50
+  sigmas:
+    max: 0.5
+    min: 0.03
+    num: 10
+  epsilon_0: 1.0E-6
+  steps: 300
+  temperature: 1.0
+  num_samples: 10
+
+ggm_simulation:
+  obs_ratio_list: [0.15, 0.35, 0.85, 2.0]
+  prior_Theta: wishart_prior
+  psd_trials: 10
+  nans: 30
+  one_zero_ratio: 0.5
+  n_proportional: False
+
+lambda_glasso:
+  fun: lambda_generic
+  params:
+    a: 2.69135693
+    b: 4.61820941
+    c: -13.35200138
