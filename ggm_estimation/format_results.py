@@ -6,7 +6,7 @@ from sklearn.metrics import f1_score, accuracy_score, roc_auc_score
 from scipy.optimize import curve_fit
 import matplotlib.ticker as tick
 
-from utils.ggm_utils import _lambda_generic, lambda_glasso_selector
+from utils.ggm_utils import lambda_generic
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -159,43 +159,40 @@ def plot_results(accuracy_dict, stds_grids=None, labels=None, title="", output_f
         plt.show()
 
 
-def plot_glasso_tuning(filename, graph_type=None, nans=None, 
-                       n_proportional=None, one_zero_ratio=None, metric="Accuracy",
-                       output_file=None, ylims=None, legend_loc="best", legend_ncol=1):
-    tuning_data = pd.read_csv(filename, sep=";").groupby(["num_obs", "lambda"])["metric"].mean().to_frame()
-    num_obs_list = tuning_data.index.get_level_values("num_obs").unique()
-    max_per_num_obs = tuning_data.groupby(level=0)['metric'].idxmax().apply(lambda x: x[1])
+def plot_glasso_tuning(all_results, figsize=(10, 4), old_fitted_coefs=None, output_file=None):
+    all_results = all_results.groupby(["num_obs", "lambda"]).mean()
+    num_obs_list = all_results.index.get_level_values("num_obs").unique()
+    max_per_num_obs = all_results.groupby(level=0)['f1'].idxmax().apply(lambda x: x[1])
+    popt, _ = curve_fit(lambda_generic, max_per_num_obs.index, max_per_num_obs.values)
 
-    popt, _ = curve_fit(_lambda_generic, max_per_num_obs.index, max_per_num_obs.values)
-
-    _, axs = plt.subplots(1, 2, figsize=(10, 4))
+    # Plot the results
+    _, axs = plt.subplots(1, 2, figsize=figsize)
     for num_obs in num_obs_list:
-        axs[0].plot(tuning_data.loc[num_obs]["metric"].index, tuning_data.loc[num_obs]["metric"].values, label=rf"$k = {num_obs}$")
-    axs[1].plot(max_per_num_obs.index, max_per_num_obs.values, marker="o", label="Data")
-    axs[1].plot(num_obs_list, _lambda_generic(num_obs_list, *popt), label="Fitted curve")
-    # if graph_type is not None and nans is not None and n_proportional is not None and one_zero_ratio is not None:
-    #     axs[1].plot(num_obs_list, lambda_glasso_selector(graph_type, nans, n_proportional, one_zero_ratio)(num_obs_list).values, "--", label="Tuned fit")
+        axs[0].plot(all_results.loc[num_obs]["f1"].index, all_results.loc[num_obs]["f1"].values, label=rf"$k = {num_obs}$")
+    axs[1].plot(max_per_num_obs.index, max_per_num_obs.values, marker="o", label="Data", linestyle=None)
+    axs[1].plot(num_obs_list, lambda_generic(num_obs_list, *popt), label="Fitted curve")
+    if old_fitted_coefs is not None:
+        axs[1].plot(num_obs_list, lambda_generic(num_obs_list, *old_fitted_coefs), label="Old fitted curve")
     axs[0].set_xscale("log")
     axs[0].set_xlabel(r"$\lambda$")
-    axs[0].set_ylabel(metric)
-    axs[0].legend()
+    axs[0].set_ylabel("F1 Score")
+    axs[0].legend(loc="upper right")
     axs[0].grid()
-    if ylims is not None:
-        axs[0].set_ylim(ylims)
-    axs[0].legend(loc=legend_loc, ncol=legend_ncol)
+
     axs[1].set_xscale("log")
     axs[1].set_xlabel(r"$k$")
     axs[1].set_ylabel(r"Optimal $\lambda$")
     axs[1].legend()
     axs[1].grid()
-    print(popt)
+
+    print("Optimal parameters:")
+    print("a =", popt[0])
+    print("b =", popt[1])
+    print("c =", popt[2])
+
+    plt.tight_layout()
+
     if output_file is not None:
-        plt.savefig(output_file, bbox_inches="tight")
+        plt.savefig(output_file)
     else:
         plt.show()
-
-
-def color_fader(c1, c2, mix=0):
-    c1 = np.array(mpl.colors.to_rgb(c1))
-    c2 = np.array(mpl.colors.to_rgb(c2))
-    return mpl.colors.to_hex((1 - mix) * c1 + mix * c2)
