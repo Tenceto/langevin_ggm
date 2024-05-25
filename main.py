@@ -45,6 +45,7 @@ def main(config, logger, output_file):
 		one_zero_ratio = config.ggm_simulation.one_zero_ratio
 	except:
 		one_zero_ratio = None
+	generator_fun = getattr(gen, config.graph_generation.method)
 
 	# GLasso parameters
 	lambda_fun = partial(getattr(ggm_utils, config.lambda_glasso.fun), **config.lambda_glasso.params)
@@ -60,15 +61,20 @@ def main(config, logger, output_file):
 	torch.set_default_device("cuda")
 
 	# Start the simulations
-	for seed, A in enumerate(getattr(priors, config.graph_generation.method)(**config.graph_generation.params)):
+	for seed, A in enumerate(generator_fun(**config.graph_generation.params)):
 		output_results = list()
 		np.random.seed(seed)
 
 		n_missing = nans if n_proportional is False else np.ceil(nans * A.shape[0] * (A.shape[0] - 1) / 2)
 		max_num_obs = int(np.ceil(obs_ratio_list[-1] * n_missing))
 
-		A_obs, X_obs = gen.simulate_ggm(A, max_num_obs, nans, one_zero_ratio, n_proportional, 
-										psd_trials, prior_Theta, logger)
+		try:
+			A_obs, X_obs = gen.simulate_ggm(A, max_num_obs, nans, one_zero_ratio, n_proportional, 
+											psd_trials, prior_Theta, logger)
+		except gen.PSDGenerationError:
+			logger.warning(f"Could not generate a PSD matrix. Seed: {seed}")
+			continue
+		
 		missing_idx = np.where(np.isnan(np.triu(A_obs)))
 		A_obs_torch = torch.tensor(A_obs, device=device)
 

@@ -30,7 +30,7 @@ def simulate_ggm(A, n_obs, nans, one_zero_ratio, n_proportional, psd_trials, pri
 				pass
 			trials += 1
 		if trials == psd_trials:
-			raise RuntimeError("Could not generate a PSD matrix.")
+			raise PSDGenerationError("Could not generate a PSD matrix.")
 
 		inv_Theta = np.linalg.inv(Theta)
 		X_obs = np.random.multivariate_normal(np.zeros(num_nodes), inv_Theta, size=n_obs)
@@ -79,14 +79,14 @@ def load_graph_dataset(filename, n_sim):
         
         return graphs
 
-def generate_barabasi_albert(nodes_list, m1, m2, p, n_sim, seed):
+def generate_barabasi_albert(nodes_list, m1, m2, p, n_sim, seed=0):
     graphs = list()
     for n in nodes_list:
         graphs.extend(_generate_barabasi_albert(n, m1, m2, p, n_sim // len(nodes_list), seed=n + seed))
     random.shuffle(graphs)
     return graphs[:n_sim]
 
-def _generate_barabasi_albert(n, m1, m2, p, n_sim, seed):
+def _generate_barabasi_albert(n, m1, m2, p, n_sim, seed=0):
     np.random.seed(seed)
 
     # graphs = [nx.barabasi_albert_graph(nodes, new_edges, seed=seed + i) for i in range(n_sim)]
@@ -94,7 +94,7 @@ def _generate_barabasi_albert(n, m1, m2, p, n_sim, seed):
               for i in range(n_sim)]
     return [nx.to_numpy_array(g) for g in graphs]
 
-def generate_grids(m_min, m_max, min_nodes, max_nodes, min_random_edges, max_random_edges, n_sim, seed):
+def generate_grids(m_min, m_max, min_nodes, max_nodes, min_random_edges, max_random_edges, n_sim, seed=0):
     np.random.seed(seed)
     random.seed(seed + 1)
 
@@ -126,3 +126,6 @@ def _add_random_edges(A, n_added_edges):
         pass
 
     return A
+
+class PSDGenerationError(Exception):
+    pass
