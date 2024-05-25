@@ -1,3 +1,8 @@
+import torch.multiprocessing as mp
+try:
+   mp.set_start_method('spawn', force=True)
+except RuntimeError:
+   pass
 import numpy as np
 import cvxpy as cp
 import torch
@@ -32,7 +37,7 @@ class LangevinEstimator:
 
         return Theta_quic
     
-    def generate_sample(self, A_nan, X_obs, temperature=1.0, num_samples=1, seed=None):
+    def generate_sample(self, A_nan, X_obs, temperature=1.0, num_samples=1, seed=None, parallel=False, n_jobs=1):
         U_idxs_triu = torch.where(torch.isnan(torch.triu(A_nan)))
         O_mask = ~ torch.isnan(A_nan)
         if self.use_likelihood:
@@ -44,18 +49,29 @@ class LangevinEstimator:
             num_obs = X_obs.shape[0]
         else:
             S, Theta_est, num_obs = None, None, 0
-        
-        As = []
-        for m in range(num_samples):
-            if seed is not None:
-                torch.manual_seed(seed + m)
-                np.random.seed(seed + m)
-            this_A = self._generate_individual_sample(A_nan, S, Theta_est, temperature, U_idxs_triu, O_mask, num_obs)
-            As.append(this_A)
+
+        if not parallel:
+            As = []
+            for m in range(num_samples):
+                this_A = self._generate_individual_sample(A_nan, S, Theta_est, 
+                                                          temperature, U_idxs_triu, O_mask, 
+                                                          num_obs, seed=seed + m if seed is not None else None)
+                As.append(this_A)
+        else:
+            with mp.Pool(n_jobs) as p:
+                As = p.starmap(self._generate_individual_sample, [(A_nan, S, Theta_est, 
+                                                                   temperature, U_idxs_triu, O_mask, 
+                                                                   num_obs, seed + m if seed is not None else None) 
+                                                                  for m in range(num_samples)])
+
         A = torch.stack(As).mean(dim=0)
         return A
 
-    def _generate_individual_sample(self, A_nan, S, Theta_est, temperature, U_idxs_triu, O_mask, num_obs):
+    def _generate_individual_sample(self, A_nan, S, Theta_est, temperature, U_idxs_triu, O_mask, num_obs, seed):
+        if seed is not None:
+            torch.manual_seed(seed)
+            np.random.seed(seed)
+        
         size_U = len(U_idxs_triu[0])
         I = torch.eye(A_nan.shape[0])
         z_dist = Normal(torch.tensor(0.0).cuda(), torch.tensor(1.0).cuda())

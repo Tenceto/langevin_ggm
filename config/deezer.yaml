@@ -1,4 +1,6 @@
 device: cuda:1
+parallel: True
+n_jobs: 15
 
 graph_generation:
   method: load_graph_dataset
