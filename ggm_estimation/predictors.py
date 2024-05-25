@@ -42,9 +42,9 @@ class LangevinEstimator:
         O_mask = ~ torch.isnan(A_nan)
         if self.use_likelihood:
             # Sample covariance
-            S = torch.tensor(np.cov(X_obs, rowvar=False, ddof=0))
+            S = torch.tensor(np.cov(X_obs, rowvar=False, ddof=0), device=A_nan.device)
             # Raw estimator for Theta
-            Theta_est = torch.tensor(self._compute_raw_theta(A_nan.cpu().numpy(), X_obs))
+            Theta_est = torch.tensor(self._compute_raw_theta(A_nan.cpu().numpy(), X_obs), device=A_nan.device)
             # Number of observations (k)
             num_obs = X_obs.shape[0]
         else:
@@ -73,10 +73,10 @@ class LangevinEstimator:
             np.random.seed(seed)
         
         size_U = len(U_idxs_triu[0])
-        I = torch.eye(A_nan.shape[0])
-        z_dist = Normal(torch.tensor(0.0).cuda(), torch.tensor(1.0).cuda())
+        I = torch.eye(A_nan.shape[0], device=A_nan.device)
+        z_dist = Normal(torch.tensor(0.0, device=A_nan.device), torch.tensor(1.0, device=A_nan.device))
 
-        A_tilde = Normal(0.5, 0.5).sample(A_nan.shape)
+        A_tilde = Normal(torch.tensor(0.5, device=A_nan.device), torch.tensor(0.5, device=A_nan.device)).sample(A_nan.shape)
         A_tilde = torch.tril(A_tilde) + torch.tril(A_tilde, -1).T
         A_tilde.fill_diagonal_(0.0)
         A_tilde[O_mask] = A_nan.float()[O_mask]
@@ -114,16 +114,9 @@ class LangevinEstimator:
 
     def _update_matrix(self, A_tilde, U_idxs_triu, alpha, delta, z, sigma_i, temperature):
         # prev_A_tilde = A_tilde.copy()
-        A_tilde[U_idxs_triu[0], U_idxs_triu[1]] = (A_tilde[U_idxs_triu[0], U_idxs_triu[1]]
-                                                    + alpha * delta + torch.sqrt(torch.tensor(2 * alpha * temperature)) * z)
+        A_tilde[U_idxs_triu[0], U_idxs_triu[1]] = (A_tilde[U_idxs_triu[0], U_idxs_triu[1]] + alpha * delta + 
+                                                   torch.sqrt(torch.tensor(2 * alpha * temperature, device=A_tilde.device)) * z)
         A_tilde[U_idxs_triu[1], U_idxs_triu[0]] = A_tilde[U_idxs_triu[0], U_idxs_triu[1]]
-
-        # If there are NaN values it's because A_tilde is way too high or too low
-        # So we clip the previous values
-        # nan_idxs = np.isnan(A_tilde)
-        # if np.any(nan_idxs):
-        #     min_clip, max_clip = 0.0 - sigma_i, 1.0 + sigma_i
-        #     A_tilde[nan_idxs] = np.clip(prev_A_tilde[nan_idxs], min_clip, max_clip)
 
         return A_tilde
 

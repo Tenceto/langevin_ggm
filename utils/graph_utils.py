@@ -22,8 +22,8 @@ def pad_adjs(ori_adj, node_number):
         return a
     if ori_len > node_number:
         raise ValueError(f'ori_len {ori_len} > node_number {node_number}')
-    a = torch.concatenate([a, torch.zeros([ori_len, node_number - ori_len])], axis=-1)
-    a = torch.concatenate([a, torch.zeros([node_number - ori_len, node_number])], axis=0)
+    a = torch.concatenate([a, torch.zeros([ori_len, node_number - ori_len], device=a.device)], axis=-1)
+    a = torch.concatenate([a, torch.zeros([node_number - ori_len, node_number], device=a.device)], axis=0)
     return a
 
 def mask_adjs(adjs, node_flags):
@@ -42,8 +42,8 @@ def mask_adjs(adjs, node_flags):
 
 def add_self_loop_if_not_exists(adjs):
     if len(adjs.shape) == 4:
-        return adjs + torch.eye(adjs.size()[-1]).unsqueeze(0).unsqueeze(0).to(adjs.device)
-    return adjs + torch.eye(adjs.size()[-1]).unsqueeze(0).to(adjs.device)
+        return adjs + torch.eye(adjs.size()[-1], device=adjs.device).unsqueeze(0).unsqueeze(0)
+    return adjs + torch.eye(adjs.size()[-1], device=adjs.device).unsqueeze(0)
 
 def check_adjs_symmetry(adjs):
     tr_adjs = adjs.transpose(-1, -2)
