@@ -9,6 +9,7 @@ from argparse import ArgumentParser
 import yaml
 from easydict import EasyDict as edict
 from datetime import datetime
+import pprint
 
 import ggm_estimation.predictors as ggmp
 import ggm_estimation.data_generation as gen
@@ -21,6 +22,9 @@ torch.set_default_dtype(torch.float32)
 
 
 def main(config, logger, output_file):
+	logger.info(f"Running simulations for {config.score_model.model_file}.")
+	logger.info(f"Config parameters used: \n{pprint.pformat(config)}")
+
 	# Read parameters from config file
 
 	# General parameters
