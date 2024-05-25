@@ -6,7 +6,7 @@ from sklearn.metrics import f1_score, accuracy_score, roc_auc_score
 from scipy.optimize import curve_fit
 import matplotlib.ticker as tick
 
-from ggm_estimation.utils import _lambda_generic, lambda_glasso_selector
+from utils.ggm_utils import _lambda_generic, lambda_glasso_selector
 
 pd.options.mode.chained_assignment = None  # default='warn'
 

@@ -5,16 +5,17 @@ import random
 import pickle as pkl
 # from rpy2 import robjects
 
-import ggm_estimation.utils as ut
+import utils.ggm_utils as ggm_utils
+import utils.graph_utils as graph_utils
 
 
 def simulate_ggm(A, n_obs, nans, one_zero_ratio, n_proportional, psd_trials, prior_Theta, logger):
 		num_nodes = A.shape[0]
 		I = np.eye(num_nodes)
 
-		a = ut.adj_matrix_to_vec(A)
-		a_nan = ut.random_nan_replacement(a, nans, one_zero_ratio=one_zero_ratio, n_proportional=n_proportional)
-		A_obs = ut.vec_to_adj_matrix(a_nan)
+		a = graph_utils.adj_matrix_to_vec(A)
+		a_nan = ggm_utils.random_nan_replacement(a, nans, one_zero_ratio=one_zero_ratio, n_proportional=n_proportional)
+		A_obs = graph_utils.vec_to_adj_matrix(a_nan)
 
 		trials = 0
 		while trials < psd_trials:

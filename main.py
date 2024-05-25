@@ -9,8 +9,8 @@ from contextlib import redirect_stdout
 
 import ggm_estimation.predictors as ggmp
 import ggm_estimation.data_generation as gen
-import ggm_estimation.utils as ut
-from ggm_estimation.torch_load import load_model, score_edp_wrapper
+import utils.ggm_utils as ut
+from utils.torch_load import load_model, score_edp_wrapper
 
 torch.set_default_device("cuda")
 torch.set_default_dtype(torch.float32)
