@@ -78,7 +78,12 @@ class LangevinEstimator:
                     score_prior = 0.0
                 if self.use_likelihood:
                     cov_inv = Theta_est * (A_tilde + I)
-                    cov = torch.linalg.inv(cov_inv)
+                    try:
+                        cov = torch.cholesky_inverse(torch.linalg.cholesky(cov_inv))
+                    # If the matrix is not positive definite, we use the standard inverse
+                    # This can happen since A_tilde is noisy and is being estimated in the process
+                    except torch._C._LinAlgError:
+                        cov = torch.inverse(cov_inv)
                     aux_matrix = - torch.diag(torch.diag(cov)) + 2 * cov - 2 * S + torch.diag(torch.diag(S))
                     score_likelihood = (num_obs * aux_matrix[U_idxs_triu] * Theta_est[U_idxs_triu] * 0.5).float()
                 else:
