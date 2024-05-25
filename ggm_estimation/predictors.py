@@ -2,6 +2,7 @@ import numpy as np
 import cvxpy as cp
 import torch
 from torch import nn
+from torch.distributions import Normal
 import itertools
 from inverse_covariance import QuicGraphicalLasso, ModelAverage
 from dgl.nn import SAGEConv
@@ -57,9 +58,9 @@ class LangevinEstimator:
     def _generate_individual_sample(self, A_nan, S, Theta_est, temperature, U_idxs_triu, O_mask, num_obs):
         size_U = len(U_idxs_triu[0])
         I = torch.eye(A_nan.shape[0])
-        z_dist = torch.distributions.MultivariateNormal(torch.zeros(size_U), torch.eye(size_U))
+        z_dist = Normal(torch.tensor(0.0).cuda(), torch.tensor(1.0).cuda())
 
-        A_tilde = torch.distributions.Normal(0.5, 0.5).sample(A_nan.shape)
+        A_tilde = Normal(0.5, 0.5).sample(A_nan.shape)
         A_tilde = torch.tril(A_tilde) + torch.tril(A_tilde, -1).T
         A_tilde.fill_diagonal_(0.0)
         A_tilde[O_mask] = A_nan.float()[O_mask]
@@ -69,7 +70,7 @@ class LangevinEstimator:
             sigma_i = np.sqrt(sigma_i_sq)
 
             for _ in range(self.steps):
-                z = z_dist.sample([1])
+                z = z_dist.sample([size_U])
 
                 if self.use_prior:
                     score_prior = self.score_estimator(A_tilde, U_idxs_triu, sigma_idx=sigma_i_idx)
