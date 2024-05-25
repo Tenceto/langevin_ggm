@@ -8,13 +8,13 @@ graph_generation:
     n_sim: 50
 
 score_model:
-  model_file: ergm_aks_1000.pth
+  model_file: ergm_aks_1000
   max_nodes: 50
   sigmas:
     max: 0.5
     min: 0.03
     num: 10
-  epsilon_0: 1.0E-6
+  epsilon: 1.0E-6
   steps: 300
   temperature: 1.0
   num_samples: 10

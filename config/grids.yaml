@@ -12,13 +12,13 @@ graph_generation:
     n_sim: 100
   
 score_model:
-  model_file: grids.pth
+  model_file: grids
   max_nodes: 49
   sigmas:
     max: 0.5
     min: 0.03
     num: 10
-  epsilon_0: 1.0E-6
+  epsilon: 1.0E-6
   steps: 300
   temperature: 1.0
   num_samples: 10
