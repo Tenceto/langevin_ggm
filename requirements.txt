@@ -1,4 +1,4 @@
-torch
+torch==2.1.2
 jupyter
 numpy
 pandas
@@ -10,3 +10,5 @@ dgl
 easydict
 line_profiler
 ipywidgets
+tqdm
+pydantic

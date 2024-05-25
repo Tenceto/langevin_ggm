@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.3.0-runtime-ubuntu20.04
+FROM nvidia/cuda:12.1.0-runtime-ubuntu20.04
 
 # Avoid stuck build due to user prompt
 ARG DEBIAN_FRONTEND=noninteractive
