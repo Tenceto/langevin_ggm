@@ -97,7 +97,7 @@ def main(config, logger, output_file):
 		
 		A_langevin_prior = langevin_prior.generate_sample(A_obs_torch, X_obs=None, 
 														  temperature=temperature, num_samples=1,
-														  seed=seed)
+														  seed=seed, parallel=False, n_jobs=1)
 
 		for obs_ratio in obs_ratio_list:
 			num_obs = int(np.ceil(obs_ratio * n_missing))
@@ -105,10 +105,10 @@ def main(config, logger, output_file):
 
 			# A_langevin_likelihood = langevin_likelihood.generate_sample(A_obs_torch, X_obs[:num_obs], 
 			# 												   			temperature=temperature, num_samples=10,
-			# 															seed=(seed + 1) * 3)
+			# 															seed=(seed + 1) * 3, parallel=config.parallel, n_jobs=config.n_jobs)
 			A_langevin_posterior = langevin_posterior.generate_sample(A_obs_torch, X_obs[:num_obs],
 															 		  temperature=temperature, num_samples=num_samples,
-																	  seed=(seed + 1) * 3)
+																	  seed=(seed + 1) * 3, parallel=config.parallel, n_jobs=config.n_jobs)
 			
 			A_all = {
 				"langevin_posterior": A_langevin_posterior, 
@@ -142,7 +142,7 @@ def main(config, logger, output_file):
 			logger.info(f"Finished iteration. Seed: {seed}, k/|U| = {obs_ratio}, k = {num_obs}, |U|: {len(missing_idx[0])}")
 		pd.DataFrame(output_results).to_csv(output_file, mode='a', sep=";", header=not os.path.exists(output_file))
 
-		return
+	return
 
 
 if __name__ == '__main__':
