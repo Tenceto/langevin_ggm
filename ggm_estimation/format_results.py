@@ -12,6 +12,36 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 def compute_estimation_performance(filename, tuneable_methods, fixed_methods, train_size, threshold_grid, metric, col_x_axis, 
                                    n_splits=5, agg_fun="mean"):
+    """
+    Compute the performance of the methods in the given file. 
+    We use the method described in Algorithm 2 in Appendix B.1 of the paper.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the file containing the results.
+    tuneable_methods : list
+        List of methods that have a tuneable threshold.
+    fixed_methods : list
+        List of methods that have a fixed threshold.
+    train_size : float
+        Proportion of the data used to fit the threshold in each split.
+    threshold_grid : dict
+        Dictionary containing the grid of thresholds for each method.
+    metric : str
+        Metric used to evaluate the performance of the methods. It can be "accuracy", "f1" or "auc".
+    col_x_axis : str
+        Column used to group the results. Typically 'obs_ratio'.
+    n_splits : int
+        Number of splits used to compute the performance.
+    agg_fun : str
+        Aggregation function used to compute the performance. It can be "mean" or "median".
+
+    Returns
+    -------
+    final_scores : dict
+        Dictionary containing the final scores for each method.
+    """
     if metric == "accuracy":
         metric_fun = accuracy_score
     elif metric == "f1":
@@ -66,6 +96,9 @@ def compute_estimation_performance(filename, tuneable_methods, fixed_methods, tr
 
 
 def _select_threshold_validation_set(df_train, df_test, tuneable_methods, threshold_grid, metric_fun, col_x_axis, agg_fun):
+    """
+    Select the best threshold for each method in the validation set.
+    """
     final_scores = dict()
     final_variances = dict()
     for method in tuneable_methods:

@@ -16,6 +16,27 @@ import dgl
 
 
 class LangevinEstimator:
+    """
+    Annealed Langevin MCMC estimator for the posterior mean of the adjacency matrix 
+    of a partially known Gaussian Graphical Model.
+    This class implements Algorithm 1 from Section 3.5 in our paper.
+
+    Parameters
+    ----------
+    sigmas : list
+        List of standard deviations for the noise levels in decreasing order.
+    epsilon : float
+        Step size for the Langevin MCMC algorithm.
+    steps : int
+        Number of steps for each noise level.
+    score_estimator : callable
+        Function that computes the score of the prior distribution.
+    use_prior : bool
+        Whether to use the prior distribution in the Langevin MCMC algorithm.
+    use_likelihood : bool
+        Whether to use the likelihood in the Langevin MCMC algorithm.
+    """
+
     def __init__(self, sigmas, epsilon, steps, score_estimator, use_prior=True, use_likelihood=True):
         self.sigmas_sq = sigmas ** 2
         self.epsilon = epsilon
@@ -24,13 +45,19 @@ class LangevinEstimator:
         self.use_prior = use_prior
         self.use_likelihood = use_likelihood
 
-    def _compute_raw_theta(self, A_nan, X_obs):
+    def _compute_raw_theta(self, A_nan, X_obs, inf_penalty=10000):
+        """
+        Compute the raw estimator (constrained maximum likelihood) 
+        for the precision matrix Theta using QUIC.
+        """
         diag_idxs = np.diag_indices_from(A_nan)
         mask_inf_penalty = A_nan == 0
         mask_inf_penalty[diag_idxs] = False
 
         Lambda = np.zeros(A_nan.shape)
-        Lambda[mask_inf_penalty] = 10000
+        # The "infinite penalty" should not be ridiculously high
+        # Otherwise the algorithm becomes numerically unstable
+        Lambda[mask_inf_penalty] = inf_penalty
 
         model_cv = QuicGraphicalLasso(lam=Lambda, init_method="cov")
         Theta_quic = model_cv.fit(X_obs).precision_
@@ -38,6 +65,33 @@ class LangevinEstimator:
         return Theta_quic
     
     def generate_sample(self, A_nan, X_obs, temperature=1.0, num_samples=1, seed=None, parallel=False, n_jobs=1):
+        """
+        Generate a the posterior sample mean of the adjacency matrix A.
+
+        Parameters
+        ----------
+        A_nan : torch.Tensor
+            Partially observed adjacency matrix.
+        X_obs : np.ndarray
+            Observed data from the Gaussian Graphical Model. 
+            Dimensions are (num_obs, num_nodes).
+        temperature : float
+            Temperature parameter for the Langevin MCMC algorithm. 
+            Should be positive and less than 1.
+        num_samples : int
+            Number of samples to generate to estimate the posterior mean.
+        seed : int
+            Seed for the random number generator.
+        parallel : bool
+            Whether to use parallel processing to generate the samples.
+        n_jobs : int
+            Number of jobs to use in parallel processing.
+
+        Returns
+        -------
+        torch.Tensor
+            Posterior sample mean of the adjacency matrix A.
+        """
         U_idxs_triu = torch.where(torch.isnan(torch.triu(A_nan)))
         O_mask = ~ torch.isnan(A_nan)
         if self.use_likelihood:
@@ -68,6 +122,9 @@ class LangevinEstimator:
         return A
 
     def _generate_individual_sample(self, A_nan, S, Theta_est, temperature, U_idxs_triu, O_mask, num_obs, seed):
+        """
+        Generate a single sample of the adjacency matrix A.
+        """
         if seed is not None:
             torch.manual_seed(seed)
             np.random.seed(seed)
@@ -239,22 +296,6 @@ class MLPPredictor(nn.Module):
         self.W2 = nn.Linear(h_feats, 1)
 
     def apply_edges(self, edges):
-        """
-        Computes a scalar score for each edge of the given graph.
-
-        Parameters
-        ----------
-        edges :
-            Has three members ``src``, ``dst`` and ``data``, each of
-            which is a dictionary representing the features of the
-            source nodes, the destination nodes, and the edges
-            themselves.
-
-        Returns
-        -------
-        dict
-            A dictionary of new edge features.
-        """
         h = torch.cat([edges.src['h'], edges.dst['h']], 1)
         return {'score': self.W2(F.relu(self.W1(h))).squeeze(1)}
 
