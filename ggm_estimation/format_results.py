@@ -196,3 +196,9 @@ def plot_glasso_tuning(all_results, figsize=(10, 4), old_fitted_coefs=None, outp
         plt.savefig(output_file)
     else:
         plt.show()
+
+
+def color_fader(c1, c2, mix=0):
+    c1 = np.array(mpl.colors.to_rgb(c1))
+    c2 = np.array(mpl.colors.to_rgb(c2))
+    return mpl.colors.to_hex((1 - mix) * c1 + mix * c2)
