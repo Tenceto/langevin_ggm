@@ -338,7 +338,7 @@ class TIGEREstimator:
             obj = cp.Minimize(n_inv_sqrt * cp.pnorm(Z_obs[:, j].reshape(-1, 1) - Z_without_col_j @ beta, 2) + lam * cp.pnorm(beta, 1))
             constraints = []
             prob = cp.Problem(obj, constraints)
-            prob.solve()
+            prob.solve(solver=cp.CLARABEL)
 
             beta = beta.value
             tau = n_inv_sqrt * np.linalg.norm(Z_obs[:, j].reshape(-1, 1) - Z_without_col_j @ beta)
