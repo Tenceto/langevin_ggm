@@ -34,8 +34,3 @@ lambda_glasso:
     a: 2.10615704
     b: -5.49361124
     c: 18.04472622
-  # # Use the ones below when estimating the whole graph (i.e., nans = 1.0)
-  # params:
-  #   a: 3.16160777
-  #   b: -17.52335464
-  #   c: 45.6692579
