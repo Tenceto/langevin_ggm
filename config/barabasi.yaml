@@ -1,0 +1,39 @@
+device: cuda:1
+parallel: True
+n_jobs: 15
+
+graph_generation:
+  method: generate_barabasi_albert
+  params:
+    nodes_list: [46, 48, 50, 52]
+    m1: 2
+    m2: 4
+    p: 0.5
+    n_sim: 100
+
+score_model:
+  model_file: barabasi_albert
+  max_nodes: 53
+  sigmas:
+    max: 0.5
+    min: 0.03
+    num: 10
+  epsilon: 1.0E-6
+  steps: 300
+  temperature: 1.0
+  num_samples: 10
+
+ggm_simulation:
+  obs_ratio_list: [0.15, 0.35, 0.85, 2.0]
+  prior_Theta: wishart_prior
+  psd_trials: 10
+  nans: 0.1
+  one_zero_ratio: 0.2
+  n_proportional: True
+
+lambda_glasso:
+  fun: lambda_generic
+  params:
+    a: 15.3884894
+    b: -138.48359488
+    c: 363.68821508

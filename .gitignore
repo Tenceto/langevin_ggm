@@ -41,6 +41,7 @@ ENV/
 .idea/
 ssh_data.txt
 
+*.csv
 *.out
 *.pdf
 *.svg

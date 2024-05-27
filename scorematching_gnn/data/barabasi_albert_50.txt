@@ -1,6 +1,0 @@
-barabasi_albert
-nodes: 50
-m1 = 2
-m2 = 4
-p = 0.5
-seed_nx: 0

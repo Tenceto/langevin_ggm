@@ -1,7 +1,13 @@
+import torch.multiprocessing as mp
+try:
+   mp.set_start_method('spawn', force=True)
+except RuntimeError:
+   pass
 import numpy as np
 import cvxpy as cp
 import torch
 from torch import nn
+from torch.distributions import Normal
 import itertools
 from inverse_covariance import QuicGraphicalLasso, ModelAverage
 from dgl.nn import SAGEConv
@@ -10,6 +16,27 @@ import dgl
 
 
 class LangevinEstimator:
+    """
+    Annealed Langevin MCMC estimator for the posterior mean of the adjacency matrix 
+    of a partially known Gaussian Graphical Model.
+    This class implements Algorithm 1 from Section 3.5 in our paper.
+
+    Parameters
+    ----------
+    sigmas : list
+        List of standard deviations for the noise levels in decreasing order.
+    epsilon : float
+        Step size for the Langevin MCMC algorithm.
+    steps : int
+        Number of steps for each noise level.
+    score_estimator : callable
+        Function that computes the score of the prior distribution.
+    use_prior : bool
+        Whether to use the prior distribution in the Langevin MCMC algorithm.
+    use_likelihood : bool
+        Whether to use the likelihood in the Langevin MCMC algorithm.
+    """
+
     def __init__(self, sigmas, epsilon, steps, score_estimator, use_prior=True, use_likelihood=True):
         self.sigmas_sq = sigmas ** 2
         self.epsilon = epsilon
@@ -18,48 +45,95 @@ class LangevinEstimator:
         self.use_prior = use_prior
         self.use_likelihood = use_likelihood
 
-    def _compute_raw_theta(self, A_nan, X_obs):
+    def _compute_raw_theta(self, A_nan, X_obs, inf_penalty=10000):
+        """
+        Compute the raw estimator (constrained maximum likelihood) 
+        for the precision matrix Theta using QUIC.
+        """
         diag_idxs = np.diag_indices_from(A_nan)
         mask_inf_penalty = A_nan == 0
         mask_inf_penalty[diag_idxs] = False
 
         Lambda = np.zeros(A_nan.shape)
-        Lambda[mask_inf_penalty] = 10000
+        # The "infinite penalty" should not be ridiculously high
+        # Otherwise the algorithm becomes numerically unstable
+        Lambda[mask_inf_penalty] = inf_penalty
 
         model_cv = QuicGraphicalLasso(lam=Lambda, init_method="cov")
         Theta_quic = model_cv.fit(X_obs).precision_
 
         return Theta_quic
     
-    def generate_sample(self, A_nan, X_obs, temperature=1.0, num_samples=1, seed=None):
+    def generate_sample(self, A_nan, X_obs, temperature=1.0, num_samples=1, seed=None, parallel=False, n_jobs=1):
+        """
+        Generate a the posterior sample mean of the adjacency matrix A.
+
+        Parameters
+        ----------
+        A_nan : torch.Tensor
+            Partially observed adjacency matrix.
+        X_obs : np.ndarray
+            Observed data from the Gaussian Graphical Model. 
+            Dimensions are (num_obs, num_nodes).
+        temperature : float
+            Temperature parameter for the Langevin MCMC algorithm. 
+            Should be positive and less than 1.
+        num_samples : int
+            Number of samples to generate to estimate the posterior mean.
+        seed : int
+            Seed for the random number generator.
+        parallel : bool
+            Whether to use parallel processing to generate the samples.
+        n_jobs : int
+            Number of jobs to use in parallel processing.
+
+        Returns
+        -------
+        torch.Tensor
+            Posterior sample mean of the adjacency matrix A.
+        """
         U_idxs_triu = torch.where(torch.isnan(torch.triu(A_nan)))
         O_mask = ~ torch.isnan(A_nan)
         if self.use_likelihood:
             # Sample covariance
-            S = torch.tensor(np.cov(X_obs, rowvar=False, ddof=0))
+            S = torch.tensor(np.cov(X_obs, rowvar=False, ddof=0), device=A_nan.device)
             # Raw estimator for Theta
-            Theta_est = torch.tensor(self._compute_raw_theta(A_nan.cpu().numpy(), X_obs))
+            Theta_est = torch.tensor(self._compute_raw_theta(A_nan.cpu().numpy(), X_obs), device=A_nan.device)
             # Number of observations (k)
             num_obs = X_obs.shape[0]
         else:
             S, Theta_est, num_obs = None, None, 0
-        
-        As = []
-        for m in range(num_samples):
-            if seed is not None:
-                torch.manual_seed(seed + m)
-                np.random.seed(seed + m)
-            this_A = self._generate_individual_sample(A_nan, S, Theta_est, temperature, U_idxs_triu, O_mask, num_obs)
-            As.append(this_A)
+
+        if not parallel:
+            As = []
+            for m in range(num_samples):
+                this_A = self._generate_individual_sample(A_nan, S, Theta_est, 
+                                                          temperature, U_idxs_triu, O_mask, 
+                                                          num_obs, seed=seed + m if seed is not None else None)
+                As.append(this_A)
+        else:
+            with mp.Pool(n_jobs) as p:
+                As = p.starmap(self._generate_individual_sample, [(A_nan, S, Theta_est, 
+                                                                   temperature, U_idxs_triu, O_mask, 
+                                                                   num_obs, seed + m if seed is not None else None) 
+                                                                  for m in range(num_samples)])
+
         A = torch.stack(As).mean(dim=0)
         return A
 
-    def _generate_individual_sample(self, A_nan, S, Theta_est, temperature, U_idxs_triu, O_mask, num_obs):
+    def _generate_individual_sample(self, A_nan, S, Theta_est, temperature, U_idxs_triu, O_mask, num_obs, seed):
+        """
+        Generate a single sample of the adjacency matrix A.
+        """
+        if seed is not None:
+            torch.manual_seed(seed)
+            np.random.seed(seed)
+        
         size_U = len(U_idxs_triu[0])
-        I = torch.eye(A_nan.shape[0])
-        z_dist = torch.distributions.MultivariateNormal(torch.zeros(size_U), torch.eye(size_U))
+        I = torch.eye(A_nan.shape[0], device=A_nan.device)
+        z_dist = Normal(torch.tensor(0.0, device=A_nan.device), torch.tensor(1.0, device=A_nan.device))
 
-        A_tilde = torch.distributions.Normal(0.5, 0.5).sample(A_nan.shape)
+        A_tilde = Normal(torch.tensor(0.5, device=A_nan.device), torch.tensor(0.5, device=A_nan.device)).sample(A_nan.shape)
         A_tilde = torch.tril(A_tilde) + torch.tril(A_tilde, -1).T
         A_tilde.fill_diagonal_(0.0)
         A_tilde[O_mask] = A_nan.float()[O_mask]
@@ -69,7 +143,7 @@ class LangevinEstimator:
             sigma_i = np.sqrt(sigma_i_sq)
 
             for _ in range(self.steps):
-                z = z_dist.sample([1])
+                z = z_dist.sample([size_U])
 
                 if self.use_prior:
                     score_prior = self.score_estimator(A_tilde, U_idxs_triu, sigma_idx=sigma_i_idx)
@@ -77,7 +151,12 @@ class LangevinEstimator:
                     score_prior = 0.0
                 if self.use_likelihood:
                     cov_inv = Theta_est * (A_tilde + I)
-                    cov = torch.linalg.inv(cov_inv)
+                    try:
+                        cov = torch.cholesky_inverse(torch.linalg.cholesky(cov_inv))
+                    # If the matrix is not positive definite, we use the standard inverse
+                    # This can happen since A_tilde is noisy and is being estimated in the process
+                    except torch._C._LinAlgError:
+                        cov = torch.inverse(cov_inv)
                     aux_matrix = - torch.diag(torch.diag(cov)) + 2 * cov - 2 * S + torch.diag(torch.diag(S))
                     score_likelihood = (num_obs * aux_matrix[U_idxs_triu] * Theta_est[U_idxs_triu] * 0.5).float()
                 else:
@@ -92,16 +171,9 @@ class LangevinEstimator:
 
     def _update_matrix(self, A_tilde, U_idxs_triu, alpha, delta, z, sigma_i, temperature):
         # prev_A_tilde = A_tilde.copy()
-        A_tilde[U_idxs_triu[0], U_idxs_triu[1]] = (A_tilde[U_idxs_triu[0], U_idxs_triu[1]]
-                                                    + alpha * delta + torch.sqrt(torch.tensor(2 * alpha * temperature)) * z)
+        A_tilde[U_idxs_triu[0], U_idxs_triu[1]] = (A_tilde[U_idxs_triu[0], U_idxs_triu[1]] + alpha * delta + 
+                                                   torch.sqrt(torch.tensor(2 * alpha * temperature, device=A_tilde.device)) * z)
         A_tilde[U_idxs_triu[1], U_idxs_triu[0]] = A_tilde[U_idxs_triu[0], U_idxs_triu[1]]
-
-        # If there are NaN values it's because A_tilde is way too high or too low
-        # So we clip the previous values
-        # nan_idxs = np.isnan(A_tilde)
-        # if np.any(nan_idxs):
-        #     min_clip, max_clip = 0.0 - sigma_i, 1.0 + sigma_i
-        #     A_tilde[nan_idxs] = np.clip(prev_A_tilde[nan_idxs], min_clip, max_clip)
 
         return A_tilde
 
@@ -224,22 +296,6 @@ class MLPPredictor(nn.Module):
         self.W2 = nn.Linear(h_feats, 1)
 
     def apply_edges(self, edges):
-        """
-        Computes a scalar score for each edge of the given graph.
-
-        Parameters
-        ----------
-        edges :
-            Has three members ``src``, ``dst`` and ``data``, each of
-            which is a dictionary representing the features of the
-            source nodes, the destination nodes, and the edges
-            themselves.
-
-        Returns
-        -------
-        dict
-            A dictionary of new edge features.
-        """
         h = torch.cat([edges.src['h'], edges.dst['h']], 1)
         return {'score': self.W2(F.relu(self.W1(h))).squeeze(1)}
 
@@ -323,7 +379,7 @@ class TIGEREstimator:
             obj = cp.Minimize(n_inv_sqrt * cp.pnorm(Z_obs[:, j].reshape(-1, 1) - Z_without_col_j @ beta, 2) + lam * cp.pnorm(beta, 1))
             constraints = []
             prob = cp.Problem(obj, constraints)
-            prob.solve()
+            prob.solve(solver=cp.CLARABEL)
 
             beta = beta.value
             tau = n_inv_sqrt * np.linalg.norm(Z_obs[:, j].reshape(-1, 1) - Z_without_col_j @ beta)
